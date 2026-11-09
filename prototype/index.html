@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>창밖 도슨트 프로토타입</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#14171c; --panel2:#1b1f26; --line:#2a2f38;
+    --text:#eef1f5; --sub:#9aa3af; --dim:#5d6672;
+    --accent:#2fbf9b; --blue:#3d8bff; --ok:#2fbf71; --warn:#f2b233; --busy:#ff5a4f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#000;color:var(--text);font-family:Pretendard,"Malgun Gothic",sans-serif}
+  body{width:1920px;height:1080px;overflow:hidden;display:flex;flex-direction:column}
+
+  .screen{width:1920px;height:720px;background:var(--bg);display:flex;flex-direction:column}
+  .statusbar{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;color:var(--sub);font-size:20px}
+  .statusbar b{color:var(--text);font-weight:600}
+  .main{flex:1;display:flex;gap:16px;padding:0 16px 16px}
+
+  /* 내비 */
+  .navi{width:620px;background:var(--panel);border-radius:20px;position:relative;overflow:hidden}
+  .navi svg{position:absolute;inset:0}
+  .navcard{position:absolute;left:20px;top:20px;right:20px;background:rgba(20,23,28,.94);border:1px solid var(--line);border-radius:16px;padding:18px 22px;display:flex;align-items:center;gap:18px;transition:border-color .3s}
+  .navcard.on{border-color:var(--blue)}
+  .navarrow{width:56px;height:56px;border-radius:12px;background:var(--panel2);display:grid;place-items:center;font-size:34px}
+  .navtext .d{font-size:34px;font-weight:700}
+  .navtext .t{font-size:20px;color:var(--sub);margin-top:2px}
+  .navvoice{position:absolute;left:20px;right:20px;top:120px;background:var(--blue);color:#fff;border-radius:14px;padding:12px 18px;font-size:22px;font-weight:600;opacity:0;transform:translateY(-8px);transition:.3s}
+  .navvoice.on{opacity:1;transform:none}
+  .eta{position:absolute;left:20px;right:20px;bottom:20px;background:rgba(20,23,28,.94);border:1px solid var(--line);border-radius:16px;padding:16px 22px;display:flex;justify-content:space-between;align-items:baseline}
+  .eta .big{font-size:34px;font-weight:700}
+  .eta .small{font-size:20px;color:var(--sub)}
+  .waypt{color:var(--accent);font-weight:600}
+
+  /* 앱 */
+  .app{flex:1;background:var(--panel);border-radius:20px;padding:24px 32px;display:flex;gap:28px;position:relative;overflow:hidden}
+  .col{display:flex;flex-direction:column}
+  .left{flex:1;min-width:0}
+  .right{width:360px}
+  .apphead{display:flex;justify-content:space-between;align-items:center}
+  .brand{display:flex;align-items:center;gap:12px;font-size:26px;font-weight:700}
+  .brand i{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#2fbf9b,#3d8bff);display:inline-block}
+  .mode{font-size:19px;padding:8px 14px;border-radius:999px;background:var(--panel2);color:var(--sub);transition:.3s}
+  .mode.family{background:rgba(47,191,155,.16);color:var(--accent);font-weight:700}
+
+  .loadrow{margin-top:20px;display:flex;align-items:center;gap:20px}
+  .gauge{display:flex;gap:8px}
+  .seg{width:104px;height:50px;border-radius:12px;background:var(--panel2);color:var(--dim);display:grid;place-items:center;font-size:19px;font-weight:600;transition:.25s;border:2px solid transparent}
+  .seg.on[data-l="0"]{background:rgba(47,191,113,.16);color:var(--ok);border-color:var(--ok)}
+  .seg.on[data-l="1"]{background:rgba(61,139,255,.16);color:var(--blue);border-color:var(--blue)}
+  .seg.on[data-l="2"]{background:rgba(242,178,51,.16);color:var(--warn);border-color:var(--warn)}
+  .seg.on[data-l="3"]{background:rgba(255,90,79,.18);color:var(--busy);border-color:var(--busy)}
+  .reason{font-size:20px;color:var(--sub);line-height:1.4}
+  .reason b{color:var(--text)}
+
+  .place{margin-top:22px;display:flex;align-items:center;gap:16px;opacity:0;transition:opacity .4s}
+  .place.on{opacity:1}
+  .pin{width:52px;height:52px;border-radius:14px;background:rgba(47,191,155,.16);display:grid;place-items:center;font-size:26px}
+  .place .n{font-size:30px;font-weight:700}
+  .place .s{font-size:18px;color:var(--sub);margin-top:2px}
+
+  .talk{flex:1;margin-top:18px;display:flex;flex-direction:column;justify-content:flex-start;gap:16px}
+  .bubble{border-radius:18px;padding:18px 24px;transition:opacity .3s}
+  .doc{background:var(--panel2)}
+  .who{font-size:16px;color:var(--sub);margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  .doc .t{font-size:28px;font-weight:600;line-height:1.4}
+  .kid{align-self:flex-end;background:rgba(47,191,155,.14);border:1px solid rgba(47,191,155,.45)}
+  .kid .t{font-size:28px;line-height:1.3}
+  .hidden{opacity:0}
+  .mic{width:12px;height:12px;border-radius:50%;background:var(--ok);display:inline-block}
+  .mic.live{animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  .quizbadge{display:inline-block;background:var(--warn);color:#000;font-size:15px;font-weight:700;border-radius:6px;padding:2px 8px;margin-right:8px;vertical-align:middle}
+
+  .suggest{position:absolute;left:32px;right:420px;bottom:24px;background:rgba(47,191,155,.12);border:2px solid var(--accent);border-radius:18px;padding:18px 22px;display:flex;align-items:center;gap:18px;opacity:0;transform:translateY(12px);transition:.4s}
+  .suggest.on{opacity:1;transform:none}
+  .suggest .ic{font-size:34px}
+  .suggest .a{font-size:24px;font-weight:700}
+  .suggest .b{font-size:18px;color:var(--sub);margin-top:4px}
+  .suggest .go{margin-left:auto;background:var(--accent);color:#04241c;border-radius:12px;padding:10px 18px;font-size:20px;font-weight:700}
+
+  /* 오른쪽: 경로상 이야기 목록 */
+  .rtitle{font-size:18px;color:var(--sub);margin-top:6px}
+  .score{margin-top:10px;background:var(--panel2);border-radius:14px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
+  .score .l{font-size:17px;color:var(--sub)}
+  .score .n{font-size:30px;font-weight:700;color:var(--warn)}
+  .stops{margin-top:16px;display:flex;flex-direction:column;gap:0;position:relative}
+  .stop{display:flex;gap:14px;padding:10px 0;position:relative}
+  .dot{width:18px;height:18px;border-radius:50%;border:3px solid var(--dim);background:var(--panel);margin-top:4px;flex:none;z-index:1;transition:.3s}
+  .stop::before{content:"";position:absolute;left:8px;top:28px;bottom:-12px;width:2px;background:var(--line)}
+  .stop:last-child::before{display:none}
+  .stop .n{font-size:21px;font-weight:600;color:var(--sub);transition:.3s}
+  .stop .s{font-size:16px;color:var(--dim);margin-top:2px}
+  .stop.now .dot{border-color:var(--accent);background:var(--accent)}
+  .stop.now .n{color:var(--text)}
+  .stop.done .dot{border-color:var(--accent)}
+  .stop.done .n{color:var(--dim);text-decoration:line-through}
+  .stop.add .n{color:var(--accent)}
+
+  .pause{position:absolute;inset:0;z-index:5;background:rgba(11,13,16,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:0;pointer-events:none;transition:opacity .25s}
+  .pause.on{opacity:1}
+  .pause .ic{width:96px;height:96px;border-radius:50%;border:4px solid var(--busy);display:grid;place-items:center;font-size:40px;color:var(--busy)}
+  .pause .t1{font-size:34px;font-weight:700}
+  .pause .t2{font-size:22px;color:var(--sub)}
+
+  .record{position:absolute;inset:0;z-index:6;background:var(--panel);padding:28px 32px;opacity:0;pointer-events:none;transition:opacity .4s;display:flex;flex-direction:column;gap:16px}
+  .record.on{opacity:1}
+  .record h2{font-size:30px}
+  .record .sub{font-size:19px;color:var(--sub)}
+  .stats{display:flex;gap:16px}
+  .stat{flex:1;background:var(--panel2);border-radius:16px;padding:16px 20px}
+  .stat .n{font-size:34px;font-weight:700}
+  .stat .l{font-size:17px;color:var(--sub)}
+  .plist{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+  .pc{background:var(--panel2);border-radius:16px;padding:16px 18px}
+  .pc .n{font-size:21px;font-weight:700}
+  .pc .s{font-size:16px;color:var(--sub);margin-top:6px;line-height:1.4}
+  .pc .q{font-size:15px;margin-top:10px;color:var(--warn);font-weight:600}
+
+  /* 시연용 신호 패널 */
+  .rig{flex:1;background:#101215;padding:18px 32px;display:flex;flex-direction:column;gap:14px}
+  .righead{display:flex;justify-content:space-between;align-items:center;font-size:18px;color:var(--sub)}
+  .righead b{color:var(--text)}
+  .signals{display:flex;gap:12px}
+  .sig{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;cursor:default;transition:.2s}
+  .sig .k{font-size:18px;color:var(--sub)}
+  .sig .v{font-size:32px;font-weight:700;margin-top:8px}
+  .sig.act{border-color:var(--warn);background:rgba(242,178,51,.1)}
+  .sig.act .v{color:var(--warn)}
+  .sig.blink .v{animation:pulse .6s infinite}
+  .caption{margin-top:auto;background:#000;border-radius:14px;padding:16px 24px;font-size:28px;font-weight:600;min-height:72px;display:flex;align-items:center;gap:14px}
+  .caption .tag{font-size:16px;color:#000;background:var(--warn);border-radius:6px;padding:3px 8px;font-weight:700}
+  .controls{display:flex;gap:10px}
+  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:16px;cursor:pointer;font-family:inherit}
+  body.auto .controls{display:none}
+</style>
+</head>
+<body>
+<section class="screen">
+  <div class="statusbar">
+    <span><b>5월 3일 (토) <span id="clock">09:20</span></b> · 맑음 19°C</span>
+    <span>Pleos Connect · 창밖 도슨트</span>
+    <span>LTE ▂▄▆</span>
+  </div>
+  <div class="main">
+    <div class="navi">
+      <svg viewBox="0 0 620 608" width="620" height="608">
+        <rect width="620" height="608" fill="#11141a"/>
+        <g fill="#16241e"><path d="M40 330 q60 -70 120 -20 q40 30 90 -10 l20 60 q-80 50 -230 30z"/><path d="M380 160 q70 -40 150 10 l10 70 q-90 20 -170 -20z"/></g>
+        <g stroke="#1d222b" stroke-width="14" fill="none"><path d="M-20 520 C200 480 260 420 300 300 S420 120 640 80"/><path d="M-20 200 H640"/></g>
+        <path d="M300 640 V470 C300 380 360 330 420 280 S520 160 560 60" stroke="#3d8bff" stroke-width="12" fill="none" stroke-linecap="round"/>
+        <g font-family="Pretendard" font-size="17" fill="#7c8794">
+          <text x="70" y="300">계룡산</text><text x="420" y="150">내장산</text>
+        </g>
+        <g id="car" transform="translate(300 540)"><circle r="22" fill="#3d8bff" opacity=".25"/><path d="M0 -14 L11 12 L0 6 L-11 12 Z" fill="#fff"/></g>
+      </svg>
+      <div class="navcard" id="navcard">
+        <div class="navarrow" id="navarrow">↑</div>
+        <div class="navtext"><div class="d" id="navdist">18km</div><div class="t" id="navname">천안논산고속도로 직진</div></div>
+      </div>
+      <div class="navvoice" id="navvoice">🔊 잠시 후 오른쪽 방향, 호남고속도로입니다</div>
+      <div class="eta">
+        <div><div class="big" id="etamin">2시간 10분</div><div class="small"><span id="wp"></span>담양 · 도착 <span id="etaat">11:30</span></div></div>
+        <div class="small" id="etakm">198km</div>
+      </div>
+    </div>
+
+    <div class="app">
+      <div class="col left">
+        <div class="apphead">
+          <div class="brand"><i></i>창밖 도슨트</div>
+          <div class="mode" id="mode">운전자 모드</div>
+        </div>
+        <div class="loadrow">
+          <div class="gauge">
+            <div class="seg" data-l="0">정차</div><div class="seg" data-l="1">여유</div><div class="seg" data-l="2">보통</div><div class="seg" data-l="3">바쁨</div>
+          </div>
+          <div class="reason" id="reason"></div>
+        </div>
+        <div class="place" id="place"><div class="pin">⛰</div><div><div class="n" id="pname">계룡산</div><div class="s" id="psub">오른쪽 · 약 6km</div></div></div>
+        <div class="talk">
+          <div class="bubble doc hidden" id="db"><div class="who">도슨트</div><div class="t" id="dt"></div></div>
+          <div class="bubble kid hidden" id="kb"><div class="who"><span class="mic" id="mic"></span><span id="kwho">뒷좌석</span></div><div class="t" id="kt"></div></div>
+        </div>
+      </div>
+      <div class="col right">
+        <div class="rtitle">오늘 경로의 이야기</div>
+        <div class="score"><span class="l">가족 퀴즈</span><span class="n" id="score">0 / 0</span></div>
+        <div class="stops" id="stops">
+          <div class="stop" data-k="cheonan"><div class="dot"></div><div><div class="n">천안삼거리</div><div class="s">능수버들 민요</div></div></div>
+          <div class="stop" data-k="gyeryong"><div class="dot"></div><div><div class="n">계룡산</div><div class="s">이름 속 동물 두 마리</div></div></div>
+          <div class="stop" data-k="naejang"><div class="dot"></div><div><div class="n">내장산</div><div class="s">단풍 명소</div></div></div>
+          <div class="stop" data-k="juknok" id="stop-juknok" style="display:none"><div class="dot"></div><div><div class="n">죽녹원 (경유지)</div><div class="s">대나무축제 기간</div></div></div>
+          <div class="stop" data-k="meta"><div class="dot"></div><div><div class="n">메타세쿼이아길</div><div class="s">도착지</div></div></div>
+        </div>
+      </div>
+
+      <div class="suggest" id="suggest">
+        <div class="ic">🎋</div>
+        <div><div class="a">지금 담양 대나무축제 기간이에요</div><div class="b">죽녹원은 경로에서 3분 · "가자"라고 말하면 경유지로 추가</div></div>
+        <div class="go" id="go">"가자"</div>
+      </div>
+
+      <div class="pause" id="pause"><div class="ic">❚❚</div><div class="t1" id="pauseT1">길 안내가 먼저예요</div><div class="t2" id="pauseWhy">끝나면 이야기를 이어갈게요</div></div>
+
+      <div class="record" id="record">
+        <h2>오늘의 여행 기록</h2>
+        <div class="sub">도착 후에만 표시 · 가족 앨범과 폰으로 보낼 수 있어요</div>
+        <div class="stats">
+          <div class="stat"><div class="n">5곳</div><div class="l">지나며 들은 이야기</div></div>
+          <div class="stat"><div class="n">4 / 5</div><div class="l">가족 퀴즈 정답</div></div>
+          <div class="stat"><div class="n">1곳</div><div class="l">들른 곳 (죽녹원)</div></div>
+          <div class="stat"><div class="n">3회</div><div class="l">운전 상황으로 멈춤</div></div>
+        </div>
+        <div class="plist">
+          <div class="pc"><div class="n">천안삼거리</div><div class="s">능수버들 노래의 배경</div><div class="q">퀴즈 정답</div></div>
+          <div class="pc"><div class="n">계룡산</div><div class="s">닭 볏을 쓴 용을 닮은 산</div><div class="q">퀴즈 정답</div></div>
+          <div class="pc"><div class="n">내장산</div><div class="s">가을 단풍 명소</div><div class="q">퀴즈 오답</div></div>
+          <div class="pc"><div class="n">죽녹원</div><div class="s">대나무축제 · 들른 곳</div><div class="q">퀴즈 정답</div></div>
+          <div class="pc"><div class="n">메타세쿼이아길</div><div class="s">도착지</div><div class="q">퀴즈 정답</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="rig">
+  <div class="righead">
+    <span><b>시연용 차량 신호</b> · Pleos Connect 에뮬레이터의 Vehicle·NaviHelper 신호를 대신합니다 · 해설 내용은 예시(실서비스는 한국관광공사 TourAPI 기반)</span>
+    <div class="controls">
+      <button class="btn" data-a="turn">방향지시등</button>
+      <button class="btn" data-a="nav">내비 음성</button>
+      <button class="btn" data-a="stop">정차</button>
+      <button class="btn" data-a="rear">뒷좌석</button>
+      <button class="btn" data-a="door">도어</button>
+      <button class="btn" data-a="auto">자동 시연</button>
+    </div>
+  </div>
+  <div class="signals">
+    <div class="sig" id="s-turn"><div class="k">방향지시등</div><div class="v">꺼짐</div></div>
+    <div class="sig" id="s-steer"><div class="k">조향각</div><div class="v">0°</div></div>
+    <div class="sig" id="s-speed"><div class="k">속도 (위치 기반)</div><div class="v">98km/h</div></div>
+    <div class="sig" id="s-nav"><div class="k">내비 안내</div><div class="v">없음</div></div>
+    <div class="sig" id="s-seat"><div class="k">좌석 착석</div><div class="v">운전석</div></div>
+    <div class="sig" id="s-door"><div class="k">도어</div><div class="v">닫힘</div></div>
+  </div>
+  <div class="caption"><span class="tag">장면</span><span id="captext">토요일 아침, 가족이 담양으로 출발합니다</span></div>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const S = { turn:'off', steer:0, speed:98, nav:null, rear:false, door:false };
+
+function computeLoad(){
+  if (S.door) return {l:0, why:'<b>도착 · 도어 열림</b> → 여행 기록을 보여줍니다'};
+  if (S.turn !== 'off') return {l:3, why:'<b>방향지시등 켜짐</b> → 해설을 멈춥니다'};
+  if (Math.abs(S.steer) >= 30) return {l:3, why:'<b>큰 조향</b> → 회전이 끝날 때까지 멈춤'};
+  if (S.nav === 'voice') return {l:3, why:'<b>내비 안내 음성</b> → 내비가 먼저 말합니다'};
+  if (S.nav === 'near') return {l:2, why:'<b>분기점 접근</b> → 한 문장으로 짧게'};
+  if (S.speed === 0) return {l:0, why:'<b>정차 중</b> → 긴 이야기 가능'};
+  return {l:1, why:'<b>직진 · 안내 없음</b> → 해설과 퀴즈'};
+}
+function render(){
+  const {l, why} = computeLoad();
+  document.querySelectorAll('.seg').forEach(s => s.classList.toggle('on', +s.dataset.l === l));
+  $('reason').innerHTML = why;
+  $('pause').classList.toggle('on', l === 3);
+  $('pauseT1').textContent = S.nav === 'voice' ? '길 안내가 먼저예요' : '운전에 집중할 시간이에요';
+  $('pauseWhy').textContent = S.nav === 'voice' ? '내비 안내가 끝나면 이야기를 이어갈게요' : '차선 변경이 끝나면 이야기를 이어갈게요';
+  $('record').classList.toggle('on', S.door);
+  $('mode').textContent = S.rear ? '가족 모드 · 뒷좌석 1명' : '운전자 모드';
+  $('mode').classList.toggle('family', S.rear);
+  sig('s-turn', S.turn === 'off' ? '꺼짐' : (S.turn === 'left' ? '◀ 좌측' : '우측 ▶'), S.turn !== 'off', S.turn !== 'off');
+  sig('s-steer', S.steer + '°', Math.abs(S.steer) >= 30);
+  sig('s-speed', S.speed + 'km/h', S.speed === 0);
+  sig('s-nav', S.nav === 'voice' ? '음성 출력 중' : S.nav === 'near' ? '분기점 1km' : '없음', !!S.nav);
+  sig('s-seat', S.rear ? '운전석 + 뒷좌석' : '운전석', S.rear);
+  sig('s-door', S.door ? '열림' : '닫힘', S.door);
+  $('navcard').classList.toggle('on', !!S.nav);
+  $('navvoice').classList.toggle('on', S.nav === 'voice');
+}
+function sig(id, v, act, blink){ const el = $(id); el.querySelector('.v').textContent = v; el.classList.toggle('act', !!act); el.classList.toggle('blink', !!blink); }
+
+let typing = null;
+function doc(text, quiz=false){
+  clearInterval(typing);
+  $('db').classList.remove('hidden');
+  const el = $('dt'); el.innerHTML = quiz ? '<span class="quizbadge">퀴즈</span>' : '';
+  const span = document.createElement('span'); el.appendChild(span);
+  let i = 0;
+  typing = setInterval(() => {
+    if ($('pause').classList.contains('on')) { span.textContent += ' —'; clearInterval(typing); return; }
+    span.textContent = text.slice(0, ++i);
+    if (i >= text.length) clearInterval(typing);
+  }, 45);
+}
+function kid(text, who='뒷좌석 · 아이', live=true){ $('kb').classList.remove('hidden'); $('kt').textContent = text; $('kwho').textContent = who; $('mic').classList.toggle('live', live); }
+function hideKid(){ $('kb').classList.add('hidden'); }
+function hideDoc(){ $('db').classList.add('hidden'); clearInterval(typing); }
+function place(icon, n, s){ $('place').classList.add('on'); $('place').querySelector('.pin').textContent = icon; $('pname').textContent = n; $('psub').textContent = s; }
+function stop(k, state){ const el = document.querySelector(`.stop[data-k="${k}"]`); el.classList.remove('now','done'); if (state) el.classList.add(state); }
+function cap(t){ $('captext').textContent = t; }
+function nav(d, n, a){ $('navdist').textContent = d; $('navname').textContent = n; $('navarrow').textContent = a; }
+function eta(m, at, km){ $('etamin').textContent = m; $('etaat').textContent = at; $('etakm').textContent = km; }
+function car(x, y, r=0){ $('car').setAttribute('transform', `translate(${x} ${y}) rotate(${r})`); }
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+async function scenario(){
+  document.body.classList.add('auto');
+  Object.assign(S, { turn:'off', steer:0, speed:98, nav:null, rear:false, door:false });
+  hideDoc(); hideKid(); render();
+
+  cap('토요일 아침, 가족이 서울에서 담양으로 출발합니다');
+  await wait(2500);
+  cap('뒷좌석에 아이가 앉으면, 좌석 정보를 보고 가족 모드로 바꿉니다');
+  S.rear = true; render();
+  doc('뒷자리에 친구가 탔네요! 오늘 가는 길에 이야기 5개와 퀴즈를 준비했어요.');
+  await wait(5200);
+
+  cap('내비 경로를 미리 읽어, 곧 보일 명소를 골라 둡니다');
+  stop('cheonan', 'done'); stop('gyeryong', 'now');
+  place('⛰', '계룡산', '오른쪽 · 약 6km'); car(300, 470);
+  doc('오른쪽에 보이는 큰 산이 계룡산이에요. 산줄기가 닭 볏을 쓴 용처럼 생겼대요.');
+  await wait(6000);
+  doc('계룡산 이름에 숨어 있는 동물 두 마리는 뭘까요?', true);
+  cap('직진 구간 = 여유. 아이가 말로 답하는 퀴즈를 냅니다');
+  await wait(4000);
+  kid('닭이랑 용!');
+  await wait(1800);
+  doc('정답이에요! 닭 계(鷄), 용 룡(龍). 1점!');
+  $('score').textContent = '1 / 1';
+  await wait(3500); hideKid();
+
+  cap('분기점에서 내비 안내가 나오면 해설을 멈추고 길 안내가 먼저 나옵니다');
+  S.nav = 'near'; nav('1km', '호남고속도로 방면', '↗'); render();
+  doc('계룡산 근처에는 옛날 이야기가 아주 많은데요, 그중 하나가');
+  await wait(2600);
+  S.nav = 'voice'; render();
+  await wait(2400);
+  S.nav = null; S.turn = 'right'; S.steer = 18; render(); car(330, 400, 25);
+  await wait(2200);
+  S.turn = 'off'; S.steer = 0; render(); nav('42km', '호남고속도로 직진', '↑'); car(360, 360, 40);
+  await wait(1200);
+  cap('분기점을 지나면 하던 이야기를 이어서 합니다');
+  doc('아까 하던 이야기 이어서 할게요. 계룡산 이야기는 도착해서 기록으로도 볼 수 있어요.');
+  await wait(5200);
+
+  cap('도착 15km 전, 지금 열리는 축제를 찾아 들를 곳을 제안합니다');
+  stop('gyeryong', 'done'); stop('naejang', 'done');
+  eta('25분', '11:30', '24km'); $('clock').textContent = '11:05'; car(470, 220, 30);
+  place('🎋', '담양 죽녹원', '경로에서 3분 · 대나무축제 기간');
+  doc('지금 담양은 대나무축제 기간이에요. 죽녹원은 가는 길에서 3분이면 들를 수 있어요.');
+  $('suggest').classList.add('on');
+  await wait(5200);
+  kid('가자!', '운전석 · 아빠');
+  await wait(1400);
+  $('suggest').classList.remove('on');
+  document.getElementById('stop-juknok').style.display = ''; stop('juknok', 'now');
+  document.querySelector('[data-k="juknok"]').classList.add('add');
+  $('wp').innerHTML = '<span class="waypt">경유 죽녹원 · </span>';
+  eta('28분', '11:33', '25km');
+  doc('죽녹원을 경유지로 넣었어요. 도착하면 대나무 숲길 지도를 보여 줄게요.');
+  cap('"가자" 한마디로 내비 경로에 경유지가 추가됩니다');
+  await wait(5000); hideKid();
+
+  cap('목적지에 도착해 문이 열리면, 오늘의 여행 기록이 남습니다');
+  S.speed = 0; nav('도착', '메타세쿼이아길', '●'); eta('0분', '11:33', '0km'); $('clock').textContent = '11:33'; render(); await wait(800);
+  S.door = true; render(); hideDoc();
+  await wait(6500);
+  cap('창밖 도슨트 — 길을 미리 읽고, 운전 상황에 맞춰 먼저 말하는 차량용 도슨트');
+  await wait(3500);
+  window.__done = true;
+}
+
+document.querySelectorAll('.btn').forEach(b => b.onclick = () => {
+  const a = b.dataset.a;
+  if (a === 'turn') S.turn = S.turn === 'off' ? 'right' : 'off';
+  if (a === 'nav') S.nav = S.nav === null ? 'near' : S.nav === 'near' ? 'voice' : null;
+  if (a === 'stop') S.speed = S.speed === 0 ? 98 : 0;
+  if (a === 'rear') S.rear = !S.rear;
+  if (a === 'door') S.door = !S.door;
+  if (a === 'auto') return scenario();
+  render();
+});
+render();
+if (new URLSearchParams(location.search).has('auto')) scenario();
+</script>
+</body>
+</html>
