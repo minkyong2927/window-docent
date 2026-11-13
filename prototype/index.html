@@ -127,6 +127,8 @@
   .record.on{opacity:1}
   .record h2{font-size:30px}
   .record .sub{font-size:19px;color:var(--sub)}
+  .recqr{position:absolute;right:32px;top:24px;text-align:center;font-size:15px;color:var(--sub)}
+  .recqr svg{display:block;border-radius:8px;margin-bottom:6px}
   .stats{display:flex;gap:16px}
   .stat{flex:1;background:var(--panel2);border-radius:16px;padding:16px 20px}
   .stat .n{font-size:34px;font-weight:700}
@@ -236,6 +238,7 @@
         <div class="sub">도착 후에만 표시 · 가족 앨범과 폰으로 보낼 수 있어요</div>
         <div class="stats" id="recstats"></div>
         <div class="plist" id="recplist"></div>
+        <div class="recqr" id="recqr"></div>
       </div>
     </div>
   </div>
@@ -277,6 +280,7 @@
   <div class="caption"><span class="tag">장면</span><span id="captext">토요일 아침, 가족이 담양으로 출발합니다</span><span class="eng" id="engine"></span></div>
 </section>
 
+<script src="qr.js"></script>   <!-- 여행 기록 QR (바깥 묶음 없이 직접 씀) -->
 <!-- 시연 자료는 저장소의 sample-data/ 에 따로 둠 (임의 자료 · README 「임의 자료」 절). 앱에서는 assets 맨 위, 브라우저에서는 ../sample-data/ -->
 <script>
 (function(){
@@ -494,6 +498,18 @@ function renderRecord(){
     + (p.quiz === true ? '퀴즈 정답' : p.quiz === false ? '퀴즈 오답' : '') + '</div></div>';
   const miss = r.missed.map(t => '<div class="pc"><div class="n">' + t + '</div><div class="s">못 들은 이야기</div><div class="q">다음에 듣기</div></div>');
   $('recplist').innerHTML = r.places.map(pc).join('') + miss.join('');
+  const svg = window.QR ? QR.svg(recordText(r), 132) : '';
+  $('recqr').innerHTML = svg ? svg + '<div>폰으로 찍어 가져가기</div>' : '';
+}
+// QR 에 담는 글: 여행 기록 한 벌 (UTF-8 134바이트를 넘으면 못 들은 이야기 · 뒤쪽 명소부터 줄임)
+function recordText(r){
+  const fits = t => new TextEncoder().encode(t).length <= 134;
+  let names = r.places.map(p => p.name), missed = r.missed.slice();
+  const make = () => '창밖 도슨트 여행 기록\n' + names.join(', ') + (r.quiz.asked ? '\n가족 퀴즈 ' + r.quiz.right + ' / ' + r.quiz.asked : '')
+    + (missed.length ? '\n못 들은 이야기 ' + missed.join(', ') : '');
+  while (!fits(make()) && missed.length) missed.pop();
+  while (!fits(make()) && names.length > 1) names.pop();
+  return make();
 }
 // 가족 퀴즈 (기능 3). 앱이면 Kotlin QuizBook 이 채점, 브라우저는 같은 규칙(답에 꼭 들어야 하는 낱말 모두)
 const LQUIZ = { current:null, asked:0, right:0 };

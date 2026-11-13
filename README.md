@@ -84,8 +84,8 @@ gradle :app:assembleRelease
 | 기능 1 지나친 곳은 지난 뒤 한 줄 | 완료 | DocentBridge.kt |
 | 기능 2 들러볼 곳 제안, 가자로 경유지 | 완료, 내비 반영은 에뮬레이터 확인 전 | DocentBridge.kt 외 2 |
 | 기능 3 가족 퀴즈 문제, 들은 답 채점, 점수 | 완료 | Quiz.kt 외 1 |
-| 여행 기록, 들은 곳, 퀴즈, 들른 곳, 멈춤, 못 들은 이야기 | 완료, QR 은 진행 중 | TripRecord.kt 외 2 |
-| 기능 4 외국어 승객 해설, 한국어 한마디 | 완료, QR 은 진행 중 | DocentBridge.kt |
+| 여행 기록, 들은 곳, 퀴즈, 들른 곳, 멈춤, 못 들은 이야기, QR | 완료, 휴대폰 스캔은 확인 전 | TripRecord.kt 외 3 |
+| 기능 4 외국어 승객 해설, 한국어 한마디, 내릴 때 QR | 완료 | DocentBridge.kt 외 1 |
 | 4 음성 명령, 다시 말하기 | 완료, 마이크 확인 전 | VoiceCommand.kt 외 1 |
 | 5 ~ 8 경유지, 퀴즈, 기록과 QR, 외국어 | 진행 중 | |
 
@@ -111,6 +111,7 @@ gradle :app:assembleRelease
 
 - 공모전이 주지 않는 자료만 임의로 씀
 - 화면에도 시연 자료라고 적음
+- QR 은 바깥 묶음 없이 qr.js 로 그림, 자체 확인 53항목 통과
 
 ## Pleos SDK 사용
 
@@ -163,7 +164,7 @@ gradle :app:assembleRelease
 | Pleos 연결 | app/src/main/java/com/windowdocent/pleos | SDK 호출만 |
 | 앱 연결 | app/src/main/java/com/windowdocent | 화면, 브리지, 음성 장치 |
 | 단위 테스트 | app/src/test | 대상 하나에 테스트 하나 |
-| 화면 | prototype | 웹 프로토타입, 앱 화면으로도 씀 |
+| 화면 | prototype | 웹 프로토타입, 앱 화면으로도 씀, QR 그리기 qr.js |
 | 글꼴 | prototype/fonts | Pretendard |
 | 빌드 설정 | 맨 위, app, .github | Gradle, 매니페스트, Actions |
 | 문서와 제출물 | README, docs, apk | 시연 영상, APK |
