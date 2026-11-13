@@ -4,6 +4,51 @@
 
 [![android](https://github.com/minkyong2927/window-docent/actions/workflows/android.yml/badge.svg)](https://github.com/minkyong2927/window-docent/actions/workflows/android.yml)
 
+## 실행 방법
+
+- 웹 프로토타입: [prototype/index.html](prototype/index.html)을 브라우저로 열면 바로 동작 (설치·인터넷 필요 없음). '자동 시연' 단추로 서울→담양 가족 여행 장면이 처음부터 끝까지 재생됨
+- 앱: Android Studio에서 저장소 폴더를 열고 `app` 실행 (Pleos Connect 에뮬레이터 또는 일반 안드로이드 기기). 앱 화면은 같은 프로토타입을 WebView로 띄우고, 판단은 Kotlin 엔진이 함
+- 명령으로 빌드 (필요: JDK 17, Android SDK 35, Gradle 8.11)
+
+```bash
+gradle :app:testDebugUnitTest   # 단위 테스트
+gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
+```
+
+- CI(GitHub Actions): push마다 단위 테스트 → release 빌드, `v*` 태그 push 시 Releases에 APK 첨부. 서명키는 CI가 빌드마다 새로 만듦 (저장소에 키 없음, 로컬 빌드는 debug 키)
+
+## 테스트 환경과 필요한 설정
+
+- 필요한 설정: 없음. 앱 코드는 외부 API·키를 쓰지 않음 (글꼴 포함). Pleos SDK는 공개 저장소(`nexus-playground.pleos.ai`)에서 Gradle이 받음. 인터넷 권한은 Pleos TextToSpeech SDK 묶음이 자체 검증용으로 넣는 것 하나
+- 권한: Pleos 읽기 권한만 선언(방향지시등·주행·조향·도어·좌석·내비 경로·위치), 위치는 '차량 신호'를 켤 때 요청. 차량 제어 권한은 없음
+- 단위 테스트: JVM(JDK 17)에서 실행, 차량·에뮬레이터 없이 돎. CI가 push마다 실행
+- 앱: Android 10(API 29) 이상. 화면은 1920×1080(차량 화면 1920×720 + 시연용 신호 판) 기준으로 그리고, 기기 화면 크기에 맞춰 전체가 보이게 자동으로 맞춤
+
+## Pleos Connect 에뮬레이터 버전과 화면 규격
+
+- 대상: Pleos Connect Emulator 2.1.0 (Android 14, API 34, Automotive, AVD 'Pleos Connect v2.1.0')
+- 앱은 기본으로 화면 아래 '시연용 차량 신호' 판으로 동작하고, '차량 신호'를 켜면 Pleos Connect SDK 신호를 받도록 코드가 연결돼 있음. 에뮬레이터에서의 실행 확인은 2차 준비 기간에 진행
+- 화면 규격: 1920×1080 기준으로 그린 화면을 기기 화면 크기에 맞춰 통째로 줄이고 늘림 (1280×720, 1920×720, 1024×768, 2560×1440에서 전체가 보이는 것을 확인)
+
+## APK 위치
+
+- 지금: [Releases](https://github.com/minkyong2927/window-docent/releases) 또는 Actions 실행 결과의 `release-apk`
+- 제출 때: 저장소 `apk/팀명_WindowDocent_release.apk` (팀명이 정해지면 workflow의 `TEAM_NAME`을 바꿔 다시 빌드)
+
+## 구현 현황
+
+| 구현 | 상태 | 파일 | 확인 |
+|---|---|---|---|
+| 엔진 4종 (명소 선정·해설 방식·청중 모드·사실 검증) | 완료 | `core/RoutePoiPlanner` `NarrationGate` `Audience` `FactGuard` `DocentEngine` | 단위 테스트 |
+| 화면 ↔ 엔진 | 완료 | `DocentBridge`, `prototype/index.html` | 단위 테스트(화면이 주고받는 JSON), 브라우저용 JS 규칙과 Kotlin 엔진 결과 같음 |
+| 1. 실제 차량 신호 받기 | 코드 연결 | `pleos/PleosSignalSource`, `core/SignalBoard` `SpeedEstimator`, `NaviVoiceWatcher` | SDK와 컴파일, 단위 테스트. 에뮬레이터 실행은 2차 |
+| 2. 음성으로 해설하기 (바로 멈추고 이어 말하기) | 코드 연결 | `core/Narrator`, `pleos/PleosSpeaker`, `AppSpeaker` | SDK와 컴파일, 단위 테스트, 브라우저 시연에서 소리. 에뮬레이터 실행은 2차 |
+| 3 ~ 8. 명소 접근 해설, 음성 명령, 경유지 추가, 가족 퀴즈, 여행 기록과 QR, 외국어 내용 | 진행 중 | | |
+| 관광 데이터(TourAPI)·학습 모드·에뮬레이터 실행 확인 | 2차 (~12/2) | | |
+
+- 단위 테스트 99개
+- 앱에서는 해설 방식·청중 모드·명소 순서와 해설 길이·사실 검증·해설 음성을 모두 Kotlin 엔진이 계산 (`DocentBridge` → `DocentEngine`, `Narrator`), 화면 아래에 '판단 · Kotlin 엔진' 표시. 브라우저로 열면 같은 규칙의 JS가 대신함
+
 ## 개요
 
 - 문제: 국내 여행 대부분이 자가용인데 창밖 풍경은 그냥 지나침. 운전 중엔 찾아볼 수 없고, 폰 오디오 가이드는 회전 중인지·내비가 안내 중인지·누가 탔는지 모름
@@ -29,99 +74,68 @@
 | `FactGuard` | 환각 차단: LLM 출력에 사실 필드에 없는 숫자(연도 등)가 있으면 거부하고 사실 원문으로 대체 |
 | `Narrator` | 해설을 문장마다 소리로: 멈춤(방향지시등·큰 조향·내비 음성)이면 말하던 중이라도 바로 끊고, 풀리면 "아까 하던 이야기 이어서 할게요" 뒤 끊긴 문장을 처음부터. 분기점 접근은 한 문장까지, 도어 열림이면 끝 |
 
-- 네 엔진은 `DocentEngine` 한 곳에서 부르고, 차량 신호는 `VehicleSignalSource`로 들어옴: 기본은 프로토타입 신호 판을 읽는 `PrototypeSignalSource`, 화면의 '차량 신호'를 켜면 Pleos Connect SDK에서 받는 `PleosSignalSource`
+- 엔진은 `DocentEngine` 한 곳에서 부르고, 차량 신호는 `VehicleSignalSource`로 들어옴: 기본은 프로토타입 신호 판을 읽는 `PrototypeSignalSource`, 화면의 '차량 신호'를 켜면 Pleos Connect SDK에서 받는 `PleosSignalSource`
 - 임계값(조향각, 분기점 거리, 정차 속도, 경로 폭, 해설 길이)은 `DocentConfig` 설정값으로 분리
 - 경로가 정해지면 해설을 미리 생성·캐시 → 터널·산간 통신 끊김에도 재생 (2차)
 
-## Pleos Connect SDK/API 사용 계획
+## Pleos Connect SDK 사용
 
-차량 제어(set) API는 쓰지 않고 조회·음성 API만 사용. API 이름은 공개 SDK(Vehicle 2.3.2, NaviHelper 3.0.5, FusedLocation 1.1.3, TextToSpeech·SpeechToText 3.3.1)에서 확인. 차량 신호(Vehicle·NaviHelper·FusedLocation)는 `PleosSignalSource`로 코드에 연결해 SDK와 함께 컴파일되고, Pleos Connect 에뮬레이터에서의 실행 확인은 2차 준비 기간에 진행.
+차량 제어(set) API는 쓰지 않고 조회·음성 API만 사용. API 이름은 공개 SDK(Vehicle 2.3.2, NaviHelper 3.0.5, FusedLocation 1.1.3, TextToSpeech·SpeechToText 3.3.1) 묶음에서 확인. 확인 수준: '코드 연결' = 저장소 코드가 그 API를 부르고 SDK와 함께 컴파일됨(에뮬레이터 실행 확인은 2차), '계획' = 아직 코드 없음.
 
-| SDK | 쓰는 API | 용도 |
-|---|---|---|
-| NaviHelper | `onTBTInfo`(다음 안내 종류·거리), `onDrivingInfo`(남은 거리·시간), `addWaypoint` | 분기점 접근 판단, 해설 길이, "가자" 경유지 추가 |
-| FusedLocation | `registerFusedLocationCallback`(위치·방위), `addProximityAlert` | 명소 반경 진입, 속도 계산(Vehicle SDK에 차속 없음), 정차 판단 |
-| Vehicle | TurnSignal `registerTurnSignalState`, SteeringWheel `registerSteeringWheelAngle`, Brake `registerBrakePedalStatus` | 회전·차선 변경 중 해설 보류, 정차 판단 보조 |
-| Vehicle - Seat | `registerSeatOccupancy` | 모드 자동 전환, 퀴즈 참여 인원 |
-| Vehicle - Door | `registerDoorPosition` | 하차 시점 여행 기록·QR |
-| TextToSpeech | `speak`(문장마다), `stop`, `setLocale`, `EventListener`(onDone·onError) | 해설 음성. 일시정지가 없어 멈춤·이어 말하기는 `Narrator`가 문장 단위로 |
-| SpeechToText | 승객 발화 인식 | 언어 선택, 퀴즈 답, "가자" 명령 |
+| SDK | 쓰는 API | 용도 | 확인 수준 |
+|---|---|---|---|
+| Vehicle | TurnSignal `registerTurnSignalState`, SteeringWheel `registerSteeringWheelAngle`, Brake `registerBrakePedalStatus` | 회전·차선 변경 중 해설 보류, 정차 판단 보조 | 코드 연결 |
+| Vehicle - Seat | `registerSeatOccupancy` | 모드 자동 전환, 퀴즈 참여 인원 | 코드 연결 |
+| Vehicle - Door | `registerDoorPosition` | 하차 시점 여행 기록·QR | 코드 연결 |
+| NaviHelper | `onTBTInfo`(다음 안내 종류·거리), `onNavigationStatus` | 분기점 접근 판단 | 코드 연결 |
+| NaviHelper | `onDrivingInfo`(남은 거리·시간), `addWaypoint` | 해설 길이, "가자" 경유지 추가 | 계획 |
+| FusedLocation | `registerFusedLocationCallback`(위치) | 속도 계산(Vehicle SDK에 차속 없음), 정차 판단 | 코드 연결 |
+| FusedLocation | `addProximityAlert` | 명소 반경 진입 | 계획 |
+| TextToSpeech | `speak`(문장마다), `stop`, `setLocale`, `EventListener`(onDone·onError) | 해설 음성. 일시정지가 없어 멈춤·이어 말하기는 `Narrator`가 문장 단위로 | 코드 연결 |
+| SpeechToText | 승객 발화 인식 | 언어 선택, 퀴즈 답, "가자" 명령 | 계획 |
 
-- 관광지 원천: 한국관광공사 TourAPI (좌표·개요·운영시간·행사, 다국어)
+- 관광지 원천: 한국관광공사 TourAPI (좌표·개요·운영시간·행사, 다국어) · 2차. 1차는 시연 경로의 명소 7곳을 화면 안에 넣은 자료로 동작
 - 해설 문장·퀴즈 생성(LLM)은 Pleos SDK를 쓰지 않음: TourAPI 사실 필드를 언어·길이·대상에 맞게 미리 문장화해 `FactGuard`로 검증해 두고, 차 안에서는 TextToSpeech로 재생
 - 내비 안내 음성이 나오는 중인지는 NaviHelper에 없어 안드로이드 `AudioManager` 재생 정보(용도가 길 안내 음성인 소리)로 판단 (`NaviVoiceWatcher`)
 - 차속은 Vehicle SDK에 없어 FusedLocation 위치 변화로 계산 (`SpeedEstimator`), 못 구하는 동안은 '모름'
-
-## 구현 현황
-
-| 구분 | 1차 (~11/15) | 2차 준비 (~12/2) |
-|---|---|---|
-| 엔진 | Kotlin 구현 + 단위 테스트 99개 (엔진·신호 공급원·신호 모으기·속도 계산·해설 음성·화면 브리지) | 실차 신호·실경로로 임계값 조정 |
-| 해설 음성 | `Narrator`가 문장마다 말함: Pleos 기기는 Pleos TextToSpeech, 아니면 안드로이드 기본 TTS, 둘 다 없으면 소리 없이 진행. 브라우저 시연은 같은 규칙의 JS + 브라우저 음성 | Pleos Connect 에뮬레이터에서 실행 확인 |
-| 명소 데이터 | 프로토타입 시나리오 (서울→담양) | TourAPI 연동, 명소 30곳 × 언어 3종 |
-| 차량 신호 | 기본은 웹 프로토타입 신호 판 → `PrototypeSignalSource` → 엔진. '차량 신호' 단추로 Pleos SDK(`PleosSignalSource`) 신호로 바꿈, Pleos 기기가 아니면 시연 신호로 돌아감 | Pleos Connect 에뮬레이터에서 실행 확인 |
-| 화면 | 웹 프로토타입을 WebView로 표시 | 네이티브 화면 |
-
-- 앱에서는 해설 방식·청중 모드·명소 순서와 해설 길이·사실 검증을 모두 Kotlin 엔진이 계산 (`DocentBridge` → `DocentEngine`), 화면 아래에 '판단 · Kotlin 엔진' 표시
-- 브라우저로 열면 같은 규칙의 JS가 대신함. 브라우저용 명소 목록이 엔진 결과와 같은지는 단위 테스트(`DocentBridgeTest`)가 확인
+- 경로 좌표열은 NaviHelper가 주지 않음(출발·경유·도착 점만)
 
 ## 시연
 
 - 시연 영상: [docs/demo.webm](docs/demo.webm) (약 1분, 무음, 시나리오: 가족 여행 서울→담양)
-- 웹 프로토타입: [prototype/index.html](prototype/index.html) → 브라우저로 열면 바로 동작, '자동 시연' 버튼
 - 해설은 소리로도 나옴('소리 켬/끔' 단추 · 브라우저 음성). 자동 시연의 분기점 장면에서 내비 음성이 나오면 말하던 해설이 바로 끊기고, 지나간 뒤 "아까 하던 이야기 이어서 할게요"와 함께 끊긴 문장부터 다시 말함
 - 신호 단추: 방향지시등·내비 음성·브레이크·속도·뒷좌석·승객 언어·도어로 판단이 바뀌는 것을 확인, '사실 검증'은 틀린 연도가 든 초안이 사실 원문으로 바뀌는 것을 보여 줌
 - '차량 신호': 앱에서 누르면 Pleos SDK 신호로 판단하고 신호 판에 실제 값과 모듈별 연결 상태(차량·내비·위치·안내 음성)를 보여 줌. 브라우저나 Pleos 기기가 아닌 곳에서는 안내 글을 띄우고 시연 신호를 그대로 씀
-
-## 빌드·실행
-
-필요: JDK 17, Android SDK 35, Gradle 8.11
-
-```bash
-gradle :app:testDebugUnitTest   # 엔진·브리지 단위 테스트
-gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
-```
-
-- Android Studio: 저장소 폴더 열기 → `app` 실행 (Automotive 에뮬레이터 또는 일반 안드로이드 기기)
-- release APK: [Releases](https://github.com/minkyong2927/window-docent/releases) 또는 Actions 실행 결과의 `release-apk`
-- CI(GitHub Actions): push마다 테스트 → release 빌드, `v*` 태그 push 시 Releases에 APK 첨부
-- 서명키: CI가 빌드마다 새로 생성 (저장소에 키 없음, 로컬 빌드는 debug 키)
-
-## 테스트 환경
-
-- 단위 테스트: JVM(JDK 17)에서 실행, 차량·에뮬레이터 없이 돎. CI가 push마다 실행
-- 필요한 설정: 없음. 앱 코드는 외부 API·키를 쓰지 않음 (글꼴 포함). Pleos SDK는 공개 저장소(`nexus-playground.pleos.ai`)에서 Gradle이 받음. 인터넷 권한은 Pleos TextToSpeech SDK 묶음이 자체 검증용으로 넣는 것 하나
-- 권한: Pleos 읽기 권한만 선언(방향지시등·주행·조향·도어·좌석·내비 경로·위치), 위치는 '차량 신호'를 켤 때 요청. 차량 제어 권한은 없음
-- 앱: Android 10(API 29) 이상. 화면은 1920×1080(차량 화면 1920×720 + 시연용 신호 판) 기준으로 그리고, 기기 화면 크기에 맞춰 전체가 보이게 자동으로 맞춤
-- 대상 에뮬레이터: Pleos Connect Emulator 2.1.0 (Android 14, API 34, Automotive). 앱은 기본으로 화면 아래 '시연용 차량 신호' 판으로 동작하고, '차량 신호'를 켜면 Pleos Connect SDK 신호를 받도록 코드가 연결돼 있음. 에뮬레이터에서의 실행 확인은 2차 준비 기간에 진행
 
 ## 구조
 
 ```
 app/src/main/java/com/windowdocent/
-  MainActivity.kt            WebView로 프로토타입 화면을 띄움
-  DocentBridge.kt            화면 ↔ 엔진 다리 (window.Docent: evaluate·plan·narrate·live·liveState·speak·voiceState·voiceStop)
-  AppSpeaker.kt              말하는 장치 고르기 (Pleos TTS → 안드로이드 TTS → 소리 없음)
-  core/
-    DocentEngine.kt          엔진 네 개를 한 곳에서 부르는 창구
+  core/                      판단 엔진 (순수 Kotlin · 안드로이드 · Pleos import 없음)
+    DocentEngine.kt          엔진을 한 곳에서 부르는 창구
     Signals.kt               차량 신호·좌석 값, 설정(DocentConfig)
     RoutePoiPlanner.kt       경로 기반 명소 선정·순서·해설 길이
     NarrationGate.kt         운전 상황별 해설 방식
     Audience.kt              운전자·가족·외국어 모드
     FactGuard.kt             사실 필드 밖 숫자 차단
-    VehicleSignalSource.kt   신호 공급원 인터페이스 (Pleos SDK 연결 지점)
+    Narrator.kt              해설을 문장마다 말하고 멈춤·이어 말하기
+    VehicleSignalSource.kt   신호 공급원 인터페이스
     PrototypeSignalSource.kt 프로토타입 신호 판을 읽는 공급원 (기본)
     SignalBoard.kt           따로 오는 차량 신호를 모아 한 벌로 (실제 신호 공급원 LiveSignalSource)
     SpeedEstimator.kt        위치 변화로 차속 계산
-    Narrator.kt              해설을 문장마다 말하고 멈춤·이어 말하기
-  pleos/
-    PleosSignalSource.kt     Pleos SDK(Vehicle·NaviHelper·FusedLocation)에서 신호를 받는 공급원
-    NaviVoiceWatcher.kt      내비 안내 음성이 나오는 중인지 (AudioManager)
-    PleosSpeaker.kt          Pleos TextToSpeech 로 한 문장씩 말함
-app/src/test/...             단위 테스트
-prototype/index.html         웹 프로토타입 (앱 assets로도 사용)
+  pleos/                     Pleos SDK 연결 (SDK 호출만)
+    PleosSignalSource.kt     Vehicle·NaviHelper·FusedLocation 에서 신호를 받는 공급원
+    PleosSpeaker.kt          TextToSpeech 로 한 문장씩 말함
+  MainActivity.kt            앱 연결: WebView로 프로토타입 화면을 띄움
+  DocentBridge.kt            앱 연결: 화면 ↔ 엔진 다리 (window.Docent: evaluate·plan·narrate·live·liveState·speak·voiceState·voiceStop)
+  AppSpeaker.kt              앱 연결: 말하는 장치 고르기 (Pleos TTS → 안드로이드 TTS → 소리 없음)
+  NaviVoiceWatcher.kt        앱 연결: 내비 안내 음성이 나오는 중인지 (AudioManager)
+app/src/test/java/com/windowdocent/   단위 테스트 (대상 파일 하나에 <대상>Test.kt 하나)
+prototype/index.html         화면 한 장 (웹 프로토타입 · 앱 assets로도 사용)
 prototype/fonts/             Pretendard 글꼴 (SIL OFL 1.1)
-docs/demo.webm               시연 영상
+build.gradle.kts · settings.gradle.kts · gradle.properties · app/build.gradle.kts · AndroidManifest.xml · strings.xml · android.yml · .gitignore   빌드 설정
+README.md                    문서
+apk/ · docs/                 제출 산출물 (APK · 시연 영상)
 ```
 
 ## 팀 역할

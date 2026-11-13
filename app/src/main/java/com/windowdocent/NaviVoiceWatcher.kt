@@ -1,4 +1,4 @@
-package com.windowdocent.pleos
+package com.windowdocent
 
 import android.content.Context
 import android.media.AudioAttributes

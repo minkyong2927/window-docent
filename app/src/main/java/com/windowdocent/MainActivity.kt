@@ -25,7 +25,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         val voice = AppSpeaker(this)
         bridge = DocentBridge(
-            liveFactory = { PleosSignalSource(this).also { live = it } },
+            liveFactory = { PleosSignalSource(this, voiceWatch = ::watchNaviVoice).also { live = it } },
             onLiveStart = ::askLocationIfNeeded,
             runner = { block -> runOnUiThread(block) },
             speaker = voice,
@@ -39,6 +39,13 @@ class MainActivity : Activity() {
         web.webViewClient = WebViewClient()
         setContentView(web)
         web.loadUrl("file:///android_asset/index.html")
+    }
+
+    /** 내비 안내 음성 감시 (Pleos SDK 에 없는 값 · AudioManager) · 멈추는 함수를 돌려줌 */
+    private fun watchNaviVoice(onChange: (Boolean) -> Unit): () -> Unit {
+        val watcher = NaviVoiceWatcher(this, onChange)
+        watcher.start()
+        return watcher::stop
     }
 
     /** 위치(속도 계산용)는 실행 중에 권한을 받아야 함. 받으면 못 붙은 모듈을 다시 붙임 */

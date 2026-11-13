@@ -1,4 +1,4 @@
-package com.windowdocent.pleos
+package com.windowdocent
 
 import android.media.AudioAttributes
 import org.junit.Assert.assertFalse

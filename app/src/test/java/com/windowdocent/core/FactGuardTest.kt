@@ -5,25 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class AudienceSelectorTest {
-    @Test fun aloneIsDriverMode() =
-        assertEquals(Audience.DRIVER, AudienceSelector.select(Seats()).audience)
-
-    @Test fun frontPassengerOnlyIsDriverMode() =
-        assertEquals(Audience.DRIVER, AudienceSelector.select(Seats(frontPassenger = true)).audience)
-
-    @Test fun rearSeatIsFamilyMode() =
-        assertEquals(Audience.FAMILY, AudienceSelector.select(Seats(rearCount = 1)).audience)
-
-    @Test fun guestLanguageWinsOverFamily() {
-        val r = AudienceSelector.select(Seats(rearCount = 2), guestLanguage = "es")
-        assertEquals(AudienceResult(Audience.FOREIGN_GUEST, "es"), r)
-    }
-
-    @Test fun koreanGuestStaysFamily() =
-        assertEquals(Audience.FAMILY, AudienceSelector.select(Seats(rearCount = 1), "ko").audience)
-}
-
+/** 사실 필드에 없는 숫자가 든 초안은 막고 사실 원문으로 (FactGuard.kt) */
 class FactGuardTest {
     private val facts = listOf("경복궁은 1395년에 지어진 조선의 법궁이다.", "면적 432,703㎡")
 

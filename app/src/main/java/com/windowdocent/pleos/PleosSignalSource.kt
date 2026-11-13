@@ -43,7 +43,7 @@ import com.windowdocent.core.VehicleSignals
  * | 좌석 착석            | Vehicle Seat.registerSeatOccupancy (운전석 빼고)                   |
  * | 다음 안내까지 거리    | NaviHelper onTBTInfo                                              |
  * | 속도 · 정차          | FusedLocation registerFusedLocationCallback 의 위치 변화로 계산     |
- * | 내비 안내 음성 중     | 안드로이드 AudioManager 재생 정보 (NaviVoiceWatcher · SDK 에 값이 없음) |
+ * | 내비 안내 음성 중     | SDK 에 값이 없어 앱이 넘겨 준 감시(voiceWatch · 앱의 NaviVoiceWatcher = AudioManager)     |
  *
  * 차량 제어(set) API 는 쓰지 않음. 모듈(차량 · 내비 · 위치 · 안내 음성)마다 따로 붙여서, 하나가 없는 기기에서도 나머지는 동작함.
  * Pleos 서비스가 없는 기기(휴대폰 등)에서는 차량 · 내비 · 위치가 붙지 않고 status() 에 까닭이 남음. 앱은 그때 시연 신호를 그대로 씀.
@@ -54,6 +54,11 @@ class PleosSignalSource(
     private val board: SignalBoard = SignalBoard(),
     /** 운전석이 왼쪽인 차인지. 오른쪽 운전석 차는 false */
     private val driverOnLeft: Boolean = true,
+    /**
+     * 내비 안내 음성이 나오는지 감시를 시작하고, 멈추는 함수를 돌려줌 (SDK 에 없는 값이라 앱이 넘겨 줌 · 없으면 그 모듈은 안 붙임).
+     * 이 파일은 Pleos SDK 호출만 둠.
+     */
+    private val voiceWatch: (((Boolean) -> Unit) -> (() -> Unit))? = null,
 ) : LiveSignalSource {
     private val app: Context = context.applicationContext
     private val status = LinkedHashMap<String, String>()
@@ -327,12 +332,11 @@ class PleosSignalSource(
 
     // ── 내비 안내 음성: 기기에서 길 안내 음성이 재생 중인지 ───────────────────────────
     private fun connectVoice(opened: MutableList<() -> Unit>) {
-        val watcher = NaviVoiceWatcher(app) { speaking ->
+        val watch = checkNotNull(voiceWatch) { "안내 음성 감시 없음" }
+        opened += watch { speaking ->
             got(VOICE)
             board.naviVoice(speaking)
         }
-        watcher.start()
-        opened += { watcher.stop() }
     }
 
     private fun describe(t: Throwable): String {

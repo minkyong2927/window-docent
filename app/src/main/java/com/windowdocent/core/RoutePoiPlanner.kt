@@ -6,6 +6,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+/** 위도 · 경도 한 점 (경로점 · 명소 · 차 위치) */
 data class LatLng(val lat: Double, val lng: Double)
 
 /** 명소 사실 필드 (원천: 한국관광공사 TourAPI) */
