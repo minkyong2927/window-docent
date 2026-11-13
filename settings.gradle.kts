@@ -16,6 +16,10 @@ dependencyResolutionManagement {
         google()
         maven(centralMirror)
         mavenCentral()
+        // Pleos Connect SDK (Vehicle · NaviHelper · FusedLocation) 공개 저장소. 이 저장소에서는 ai.pleos 묶음만 받음
+        maven("https://nexus-playground.pleos.ai/repository/maven-releases/") {
+            content { includeGroupByRegex("ai\\.pleos.*") }
+        }
     }
 }
 rootProject.name = "window-docent"

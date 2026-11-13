@@ -11,8 +11,8 @@ android {
         applicationId = "com.windowdocent"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     // CI에서 만든 서명키를 환경변수로 받음. 없으면(로컬) debug 키로 서명.
@@ -49,6 +49,13 @@ android {
 }
 
 dependencies {
+    // Pleos Connect SDK: 차량 신호(방향지시등 · 조향각 · 브레이크 · 도어 · 좌석) · 내비 다음 안내 · 위치(속도 계산)
+    implementation("ai.pleos.playground:Vehicle:2.3.2")
+    implementation("ai.pleos.playground:NaviHelper:3.0.5")
+    implementation("ai.pleos.playground:FusedLocation:1.1.3")
+    // SDK 가 1.9 판 kotlin-reflect 를 끌어와서 우리 Kotlin 판에 맞춤 (공식 샘플과 같은 방식)
+    implementation("org.jetbrains.kotlin:kotlin-reflect:2.1.0")
+
     testImplementation("junit:junit:4.13.2")
     // 단위 테스트에서 화면 브리지(JSON)를 실제로 돌리기 위한 org.json 구현 (기기에서는 안드로이드에 들어 있는 것을 씀)
     testImplementation("org.json:json:20240303")

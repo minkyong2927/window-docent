@@ -14,12 +14,12 @@ enum class NavGuidance {
 /**
  * 한 시점의 차량 신호. 못 받은 값은 null (미지원 차종, 터널에서 위치가 끊긴 때 등).
  *
- * Pleos Connect SDK 에서 받을 곳 (2차 준비 기간에 연결 · Vehicle 2.3.2, NaviHelper 3.0.5, FusedLocation 1.1.3 기준):
+ * Pleos Connect SDK 에서 받는 곳 (pleos/PleosSignalSource · Vehicle 2.3.2, NaviHelper 3.0.5, FusedLocation 1.1.3 기준):
  * - speedKmh          Vehicle SDK 에 차속 API 가 없어 FusedLocation 위치 변화(LocationData)로 계산
  * - turnSignal        Vehicle TurnSignal.registerTurnSignalState
  * - steeringAngleDeg  Vehicle SteeringWheel.registerSteeringWheelAngle
  * - brakePressed      Vehicle Brake.registerBrakePedalStatus
- * - navGuidance       NaviHelper onTBTInfo (다음 안내가 있으면 TURN_AHEAD). 안내 음성 출력 중(VOICE)은 SDK 에 없어 오디오 포커스로 판단
+ * - navGuidance       NaviHelper onTBTInfo (다음 안내가 있으면 TURN_AHEAD). 안내 음성 출력 중(VOICE)은 SDK 에 없어 AudioManager 재생 정보로 판단(NaviVoiceWatcher)
  * - navDistanceM      NaviHelper onTBTInfo 의 TBTInfo.distance
  * - doorOpen          Vehicle Door.registerDoorPosition
  */
