@@ -234,19 +234,8 @@
       <div class="record" id="record">
         <h2>오늘의 여행 기록</h2>
         <div class="sub">도착 후에만 표시 · 가족 앨범과 폰으로 보낼 수 있어요</div>
-        <div class="stats">
-          <div class="stat"><div class="n">5곳</div><div class="l">지나며 들은 이야기</div></div>
-          <div class="stat"><div class="n">4 / 5</div><div class="l">가족 퀴즈 정답</div></div>
-          <div class="stat"><div class="n">1곳</div><div class="l">들른 곳 (죽녹원)</div></div>
-          <div class="stat"><div class="n">3회</div><div class="l">운전 상황으로 멈춤</div></div>
-        </div>
-        <div class="plist">
-          <div class="pc"><div class="n">천안삼거리</div><div class="s">능수버들 노래의 배경</div><div class="q">퀴즈 정답</div></div>
-          <div class="pc"><div class="n">계룡산</div><div class="s">닭 볏을 쓴 용을 닮은 산</div><div class="q">퀴즈 정답</div></div>
-          <div class="pc"><div class="n">내장산</div><div class="s">가을 단풍 명소</div><div class="q">퀴즈 오답</div></div>
-          <div class="pc"><div class="n">죽녹원</div><div class="s">대나무축제 · 들른 곳</div><div class="q">퀴즈 정답</div></div>
-          <div class="pc"><div class="n">메타세쿼이아길</div><div class="s">도착지</div><div class="q">퀴즈 정답</div></div>
-        </div>
+        <div class="stats" id="recstats"></div>
+        <div class="plist" id="recplist"></div>
       </div>
     </div>
   </div>
@@ -362,7 +351,9 @@ function render(){
   $('reason').innerHTML = d.reason === 'CAUTION_ZONE' ? '<b>위험 구간(' + (CAUTION[S.caution] || '위험 지점') + ')</b> → 지날 때까지 해설을 멈춥니다' : R.why;
   $('pause').classList.toggle('on', d.level === 3);
   if (R.t1) { $('pauseT1').textContent = R.t1; $('pauseWhy').textContent = R.t2; }
+  if (S.door && !$('record').classList.contains('on')) renderRecord();
   $('record').classList.toggle('on', S.door);
+  if (!VOICE.app) { const m = modeOf(d); if (m === 'HOLD' && LREC.last !== 'HOLD') LREC.holds++; LREC.last = m; }
   const mode = $('mode');
   mode.textContent = d.audience === 'FOREIGN_GUEST' ? '외국어 승객 모드 · ' + (LANG[d.language] || d.language)
     : d.audience === 'FAMILY' ? '가족 모드 · 뒷좌석 ' + rearCount() + '명' : '운전자 모드';
@@ -475,6 +466,25 @@ const STLABEL = { PLANNED:'예정', SPEAKING:'말하는 중', CUT:'끊김', DONE
 const SCHED = { entries:[], started:{}, reported:{}, travelled:0, avg:90, depart:null, view:null, fold:null };
 function startPoint(alongM, sec, prevEndM, kmh){ return Math.max(0, prevEndM, alongM - kmh / 3.6 * sec); }
 function textOf(id){ const p = DEMO.pois.find(x => x.id === id); return (p && p.text) || ''; }
+// 오늘의 여행 기록 (마-7). 앱이면 Kotlin TripRecord, 브라우저는 같은 셈 (해설을 시작한 곳 · 들른 곳 · 멈춘 횟수 · 퀴즈 · 못 한 이야기)
+const LREC = { heard:{}, via:{}, holds:0, last:null };
+function recordView(){
+  if (VOICE.app && BRIDGE && BRIDGE.record) return callEngine('record', {}) || { places:[], quiz:{ asked:0, right:0 }, via:[], holds:0, missed:[] };
+  const places = Object.assign({}, LREC.heard); Object.keys(LREC.via).forEach(k => { if (!places[k]) places[k] = LREC.via[k]; });
+  const res = LQUIZ.results || {};
+  return { places: Object.keys(places).map(id => ({ id, name: places[id], quiz: id in res ? res[id] : null })),
+    quiz:{ asked:LQUIZ.asked, right:LQUIZ.right }, via: Object.values(LREC.via), holds: LREC.holds, missed: (NARR.snapshot().missed || []).map(m => m.title) };
+}
+function renderRecord(){
+  const r = recordView();
+  const stat = (n, l) => '<div class="stat"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>';
+  $('recstats').innerHTML = stat(r.places.length + '곳', '지나며 들은 이야기') + stat(r.quiz.right + ' / ' + r.quiz.asked, '가족 퀴즈 정답')
+    + stat(r.via.length + '곳', '들른 곳' + (r.via.length ? ' (' + r.via.join(', ') + ')' : '')) + stat(r.holds + '회', '운전 상황으로 멈춤');
+  const pc = p => '<div class="pc"><div class="n">' + p.name + '</div><div class="s">' + ((DEMO.pois.find(x => x.id === p.id) || {}).sub || '') + '</div><div class="q">'
+    + (p.quiz === true ? '퀴즈 정답' : p.quiz === false ? '퀴즈 오답' : '') + '</div></div>';
+  const miss = r.missed.map(t => '<div class="pc"><div class="n">' + t + '</div><div class="s">못 들은 이야기</div><div class="q">다음에 듣기</div></div>');
+  $('recplist').innerHTML = r.places.map(pc).join('') + miss.join('');
+}
 // 가족 퀴즈 (기능 3). 앱이면 Kotlin QuizBook 이 채점, 브라우저는 같은 규칙(답에 꼭 들어야 하는 낱말 모두)
 const LQUIZ = { current:null, asked:0, right:0 };
 function quizNorm(s){ return String(s).toLowerCase().replace(/[\s.,!?~·'"()\-]/g, ''); }
@@ -507,6 +517,7 @@ function goWaypoint(navi){
   const id = SUGGEST; SUGGEST = null;
   $('suggest').classList.remove('on');
   VIA = true; renderStops(); stop(id, 'now');   // 경유지가 든 경로로 명소 목록을 다시 계산
+  if (!VOICE.app) LREC.via[id] = nameOf(id);
   $('wp').innerHTML = '<span class="waypt">경유 ' + nameOf(id) + ' · </span>';
   cap('경유지 ' + nameOf(id) + (navi === 'ok' ? ' · 내비에 넣음' : ' · ' + (navi || '차량 신호를 켜면 내비에 넣음')));
   return true;
@@ -803,6 +814,7 @@ function voiceCommand(text){
     const q = LQUIZ.current; LQUIZ.current = null;
     const ok = q.must.length > 0 && q.must.every(w => quizNorm(text).indexOf(quizNorm(w)) >= 0);
     if (ok) LQUIZ.right++;
+    (LQUIZ.results = LQUIZ.results || {})[q.id] = ok;
     heard = { text, command:'ANSWER', done:true, quiz:{ id:q.id, ok, line: ok ? q.right : q.wrong } };
     doc(heard.quiz.line, false, q.id + ':quiz:a');
   }
@@ -831,6 +843,7 @@ function voiceSay(){
 function voiceState(){ if (VOICE.app) return callEngine('voiceState', {}) || { lines:[] }; NARR.tick(); return NARR.snapshot(); }
 
 function doc(text, quiz=false, id=null){
+  if (id && id.indexOf(':') < 0 && !VOICE.app) LREC.heard[id] = nameOf(id);
   $('db').classList.remove('hidden');
   VOICE.nextQuiz = quiz; VOICE.quiz = quiz; VOICE.seen = [];
   const story = { id: id || ('d' + (++VOICE.seq)), title: id ? nameOf(id) : quiz ? '퀴즈' : '해설', sentences: splitSentences(text), lang:'ko' };
@@ -891,7 +904,8 @@ async function scenario(){
   document.body.classList.add('auto');
   Object.assign(S, { turn:'off', steer:0, speed:98, brake:false, nav:null, navDist:null, rear:false, front:false, door:false, lang:'ko', caution:null, cautionDist:null, arrived:false });
   VIA = false; Object.keys(STOPSTATE).forEach(k => { delete STOPSTATE[k]; });
-  LQUIZ.current = null; LQUIZ.asked = 0; LQUIZ.right = 0;
+  LQUIZ.current = null; LQUIZ.asked = 0; LQUIZ.right = 0; LQUIZ.results = {};
+  LREC.heard = {}; LREC.via = {}; LREC.holds = 0; LREC.last = null;
   $('score').textContent = '0 / 0'; $('wp').innerHTML = ''; $('suggest').classList.remove('on');
   hideDoc(); hideKid(); renderStops(); render();
 

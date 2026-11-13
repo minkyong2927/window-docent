@@ -628,4 +628,26 @@ class DocentBridgeTest {
         assertFalse(r.getJSONObject("heard").getJSONObject("quiz").getBoolean("ok"))
         assertEquals("ko:아쉬워요.", speaker.said.last())
     }
+
+    // ── 여행 기록 (마-7) ─────────────────────────────────────────────────────────────
+    @Test fun doorOpenSavesTheTripRecordOnce() {
+        val saved = ArrayList<String>()
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker, recordSink = { saved += it })
+        bridge.evaluate(state())
+        bridge.speak("""{"id":"cheonan","title":"천안삼거리","text":"첫 문장이에요."}""")
+        bridge.suggest(juknok)
+        bridge.command("""{"text":"가자"}""")
+        bridge.evaluate(state(turn = "left"))            // 멈춤 한 번
+        bridge.evaluate(state())
+        val door = state().replace("\"door\":false", "\"door\":true")
+        bridge.evaluate(door)
+        bridge.evaluate(door)                            // 문이 열려 있는 동안 한 번만
+        assertEquals(1, saved.size)
+        val r = JSONObject(saved[0])
+        assertEquals(listOf("cheonan", "juknok"), (0 until r.getJSONArray("places").length()).map { r.getJSONArray("places").getJSONObject(it).getString("id") })
+        assertEquals("죽녹원", r.getJSONArray("via").getString(0))
+        assertEquals(1, r.getInt("holds"))
+        assertEquals(r.toString(), JSONObject(bridge.record("{}")).toString())
+    }
 }

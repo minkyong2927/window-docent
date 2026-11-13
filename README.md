@@ -30,7 +30,7 @@ gradle :app:assembleRelease
 | 가속 | WHPX |
 | 도구 | adb 37.0.1, 에뮬레이터 37.2.13, 가상 콘솔 |
 | 빌드 | GitHub Actions, JDK 17 |
-| 단위 테스트 | JVM 에서 163개, 차량 없이 돎 |
+| 단위 테스트 | JVM 에서 165개, 차량 없이 돎 |
 
 ## 3. 필요한 설정
 
@@ -83,7 +83,8 @@ gradle :app:assembleRelease
 | 3 가까워지면 해설, 예정 보이기 | 완료 | NarrationSchedule.kt |
 | 기능 1 지나친 곳은 지난 뒤 한 줄 | 완료 | DocentBridge.kt |
 | 기능 2 들러볼 곳 제안, 가자로 경유지 | 완료, 내비 반영은 에뮬레이터 확인 전 | DocentBridge.kt 외 2 |
-| 기능 3 가족 퀴즈 문제, 들은 답 채점, 점수 | 완료, 여행 기록 저장은 진행 중 | Quiz.kt 외 1 |
+| 기능 3 가족 퀴즈 문제, 들은 답 채점, 점수 | 완료 | Quiz.kt 외 1 |
+| 여행 기록, 들은 곳, 퀴즈, 들른 곳, 멈춤, 못 들은 이야기 | 완료, QR 은 진행 중 | TripRecord.kt 외 2 |
 | 4 음성 명령, 다시 말하기 | 완료, 마이크 확인 전 | VoiceCommand.kt 외 1 |
 | 5 ~ 8 경유지, 퀴즈, 기록과 QR, 외국어 | 진행 중 | |
 
@@ -136,6 +137,7 @@ gradle :app:assembleRelease
 | FactGuard | 사실 자료에 없는 숫자를 막음 |
 | Narrator | 문장마다 말하고 멈추고 이어 말함, 다시 말하기 |
 | QuizBook | 퀴즈 답에 꼭 들어야 하는 낱말로 채점, 점수 |
+| TripRecord | 여행 기록을 모아 문이 열릴 때 기기에 저장 |
 | NarrationSchedule | 해설 예정과 시작 지점 |
 | VoiceCommand | 들은 말을 명령으로, 다시, 응, 나중에, 가자 |
 | CautionZone | 위험 지점 300m 앞부터 지난 뒤까지 멈춤 |

@@ -39,6 +39,7 @@ class MainActivity : Activity() {
             speaker = voice,
             speakerName = { voice.name },
             voiceInput = ears,
+            recordSink = ::saveRecord,
         )
         val web = WebView(this)
         web.settings.javaScriptEnabled = true
@@ -57,6 +58,15 @@ class MainActivity : Activity() {
         WebView.setWebContentsDebuggingEnabled(true)
         setContentView(web)
         web.loadUrl("file:///android_asset/index.html")
+    }
+
+    /** 여행 기록을 기기 안 파일(앱 전용 폴더 trip-record.json)에 저장 · 마지막 한 벌 */
+    private fun saveRecord(json: String) {
+        try {
+            java.io.File(filesDir, "trip-record.json").writeText(json, Charsets.UTF_8)
+        } catch (t: Throwable) {
+            Log.w(TAG, "여행 기록 저장 실패", t)
+        }
     }
 
     /** 음성 명령 듣기: Pleos 기기에서만 Pleos SpeechToText. 만들다 예외가 나면(권한 · 서비스) 화면의 흉내 단추로만 */

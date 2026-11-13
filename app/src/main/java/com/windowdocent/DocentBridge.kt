@@ -17,6 +17,7 @@ import com.windowdocent.core.QuizBook
 import com.windowdocent.core.QuizItem
 import com.windowdocent.core.RoutePoiPlanner
 import com.windowdocent.core.RouteStart
+import com.windowdocent.core.TripRecord
 import com.windowdocent.core.ScheduleStatus
 import com.windowdocent.core.Speaker
 import com.windowdocent.core.TurnSignal
@@ -49,6 +50,8 @@ class DocentBridge(
     speaker: Speaker? = null,
     private val speakerName: () -> String = { "" },
     private val voiceInput: VoiceInput? = null,
+    /** 문이 열려 여행 기록이 만들어지면 받아서 저장하는 곳 (앱: 기기 파일) */
+    private val recordSink: (String) -> Unit = {},
 ) {
     private val source = PrototypeSignalSource()
     private val narrator: Narrator? = speaker?.let { Narrator(it) }
@@ -77,6 +80,9 @@ class DocentBridge(
     @Volatile
     private var listening = false
     private var heard: JSONObject? = null
+    /** 오늘의 여행 기록 (마-7) · 문이 열린 순간 한 번 저장 */
+    private val trip = TripRecord()
+    private var recordSaved = false
     /** 가족 퀴즈 (기능 3) · 문제를 다 물으면 답을 한 번 들음 */
     private val quiz = QuizBook()
     private var listenedForQuiz = false
@@ -105,6 +111,15 @@ class DocentBridge(
         val d = engine.decide()
         // 해설 방식이 바뀌면 말하던 해설을 멈추거나 이어 감 · 막 도착했으면 못 한 이야기를 제안
         narrator?.onMode(d.mode)
+        trip.mode(d.mode)
+        if (d.mode == NarrationMode.TRIP_RECORD) {
+            if (!recordSaved) {
+                recordSaved = true
+                try { recordSink(recordJson().toString()) } catch (_: Throwable) {}
+            }
+        } else {
+            recordSaved = false
+        }
         val arrived = engine.signals.arrived
         if (arrived && !wasArrived) narrator?.arrived()
         wasArrived = arrived
@@ -199,6 +214,7 @@ class DocentBridge(
         val req = toMap(JSONObject(requestJson))
         val sentences = list(req["sentences"]).filterIsInstance<String>().ifEmpty { Narrator.split(req["text"] as? String ?: "") }
         val id = req["id"] as? String ?: "story"
+        trip.heard(id, req["title"] as? String ?: id)
         n.onMode(engine.decide().mode)
         n.play(Narrator.Story(id, req["title"] as? String ?: id, sentences, req["lang"] as? String ?: "ko"))
         return voiceState("{}")
@@ -327,6 +343,7 @@ class DocentBridge(
         var start: JSONObject? = null
         tick.start?.let { e ->
             val story = Narrator.Story(e.id, e.name, Narrator.split(scheduleTexts[e.id].orEmpty()))
+            trip.heard(e.id, e.name)
             val n = narrator
             if (n != null) n.play(story)
             else start = JSONObject().put("id", e.id).put("name", e.name).put("text", scheduleTexts[e.id].orEmpty())
@@ -488,6 +505,7 @@ class DocentBridge(
         val src = live
         val navi = if (liveOn && src != null) src.addWaypoint(place) else "차량 신호를 켜면 내비에 넣음"
         waypoint = JSONObject().put("id", place.id).put("name", place.name).put("navi", navi)
+        trip.via(place.id, place.name)
         return true
     }
 
@@ -504,6 +522,23 @@ class DocentBridge(
         listenedForQuiz = false
         narrator?.play(Narrator.Story(item.id + QUIZ_SUFFIX, "퀴즈", Narrator.split(item.question)))
         return voiceState("{}")
+    }
+
+    /**
+     * 오늘의 여행 기록 (마-7). 출력 {"places":[{"id","name","quiz":true|false|null}],"quiz":{"asked","right"},"via":[이름],"holds":n,"missed":[제목]}
+     * 문이 열리면(기록 모드) 같은 값을 recordSink 로 한 번 저장함
+     */
+    @JavascriptInterface
+    fun record(@Suppress("UNUSED_PARAMETER") requestJson: String): String = recordJson().toString()
+
+    private fun recordJson(): JSONObject {
+        val missed = narrator?.snapshot()?.missed?.map { it.title }.orEmpty()
+        val r = trip.snapshot(quiz.results, quiz.asked, quiz.right, missed)
+        val places = JSONArray()
+        for (p in r.places) places.put(JSONObject().put("id", p.id).put("name", p.name).put("quiz", p.quiz ?: JSONObject.NULL))
+        return JSONObject().put("places", places)
+            .put("quiz", JSONObject().put("asked", r.quizAsked).put("right", r.quizRight))
+            .put("via", JSONArray(r.via)).put("holds", r.holds).put("missed", JSONArray(r.missed))
     }
 
     /** 확인용: 내비에 목적지 경로를 요청 (에뮬레이터에서 안내 값을 받을 때). 입력 {"id","name","lat","lng"} · 출력 {"navi"} */
