@@ -475,6 +475,27 @@ const STLABEL = { PLANNED:'예정', SPEAKING:'말하는 중', CUT:'끊김', DONE
 const SCHED = { entries:[], started:{}, reported:{}, travelled:0, avg:90, depart:null, view:null, fold:null };
 function startPoint(alongM, sec, prevEndM, kmh){ return Math.max(0, prevEndM, alongM - kmh / 3.6 * sec); }
 function textOf(id){ const p = DEMO.pois.find(x => x.id === id); return (p && p.text) || ''; }
+// 들러볼 곳 제안과 「가자」 (기능 2). 앱이면 Kotlin 이 제안을 받아 두고, 가자를 들으면 차량 신호가 켜졌을 때 내비(NaviHelper addWaypoint)에 넣음
+let SUGGEST = null;
+function suggestPlace(id){
+  const ev = (STORIES.events || {})[id], p = DEMO.pois.find(x => x.id === id);
+  if (!ev || !p) return false;
+  SUGGEST = id;
+  if (VOICE.app && BRIDGE && BRIDGE.suggest) callEngine('suggest', { id, name:p.name, lat:p.lat, lng:p.lng });
+  place('🎋', '담양 ' + p.name, '경로에서 ' + ev.away + ' · ' + ev.what + ' 기간');
+  doc(ev.text);
+  $('suggest').classList.add('on');
+  return true;
+}
+function goWaypoint(navi){
+  if (!SUGGEST) return false;
+  const id = SUGGEST; SUGGEST = null;
+  $('suggest').classList.remove('on');
+  VIA = true; renderStops(); stop(id, 'now');   // 경유지가 든 경로로 명소 목록을 다시 계산
+  $('wp').innerHTML = '<span class="waypt">경유 ' + nameOf(id) + ' · </span>';
+  cap('경유지 ' + nameOf(id) + (navi === 'ok' ? ' · 내비에 넣음' : ' · ' + (navi || '차량 신호를 켜면 내비에 넣음')));
+  return true;
+}
 function nameOf(id){ const p = DEMO.pois.find(x => x.id === id); return (p && p.name) || id; }
 function departNow(){ const m = /(\d+):(\d+)/.exec($('clock').textContent || ''); const d = new Date(); if (m) d.setHours(+m[1], +m[2], 0, 0); return d.getTime(); }
 function makeSchedule(list){
@@ -761,21 +782,22 @@ VOICE.app = !!(BRIDGE && BRIDGE.speak && (callEngine('voiceState', {}) || {}).av
 function modeOf(d){ return d.reason === 'DOOR_OPEN' ? 'TRIP_RECORD' : d.level === 3 ? 'HOLD' : d.level === 2 ? 'ONE_LINE' : d.level === 0 ? 'LONG_STORY' : 'NARRATE'; }
 // 흉내 단추 · 들은 말 → 명령 (앱은 Kotlin Docent.command, 브라우저는 같은 규칙)
 function voiceCommand(text){
-  let heard;
-  if (VOICE.app) heard = (callEngine('command', { text }) || {}).heard;
+  let heard, wp = null;
+  if (VOICE.app) { const v = callEngine('command', { text }) || {}; heard = v.heard; wp = v.waypoint; }
   else {
     const command = parseCommand(text);
-    const done = command === 'REPEAT' ? NARR.repeat() : (command === 'YES' || command === 'NO') && NARR.snapshot().awaiting ? (NARR.answer(command === 'YES'), true) : false;
+    const done = command === 'REPEAT' ? NARR.repeat() : command === 'GO' ? !!SUGGEST : (command === 'YES' || command === 'NO') && NARR.snapshot().awaiting ? (NARR.answer(command === 'YES'), true) : false;
     heard = { text, command, done };
   }
-  showHeard(heard);
+  showHeard(heard, wp);
   voiceTick();
 }
-const CMD_LABEL = { REPEAT:'다시 말하기', YES:'예 · 못 한 이야기 듣기', NO:'아니오 · 나중에', GO:'경유지로 (구현 5번)', NONE:'알아들은 명령 없음' };
-function showHeard(h){
+const CMD_LABEL = { REPEAT:'다시 말하기', YES:'예 · 못 한 이야기 듣기', NO:'아니오 · 나중에', GO:'경유지로', NONE:'알아들은 명령 없음' };
+function showHeard(h, wp){
   if (!h || !h.command) return;
-  kid('「' + h.text + '」', '음성 명령 · ' + (CMD_LABEL[h.command] || h.command) + (h.done === false && h.command !== 'NONE' && h.command !== 'GO' ? ' (지금은 할 일 없음)' : ''), false);
+  kid('「' + h.text + '」', '음성 명령 · ' + (CMD_LABEL[h.command] || h.command) + (h.done === false && h.command !== 'NONE' ? ' (지금은 할 일 없음)' : ''), false);
   VOICE.heardAt = h.atMs || Date.now();
+  if (h.command === 'GO' && h.done) goWaypoint(wp && wp.navi);
 }
 function voiceSay(){
   const v = VOICE.app ? callEngine('voiceState', {}) : null;
@@ -796,7 +818,7 @@ function doc(text, quiz=false, id=null){
 function voiceTick(){
   const v = voiceState(), lines = v.lines || [], now = Date.now();
   document.body.classList.toggle('ask', !!v.awaiting);
-  if (v.heard && v.heard.atMs && v.heard.atMs !== VOICE.heardAt) showHeard(v.heard);
+  if (v.heard && v.heard.atMs && v.heard.atMs !== VOICE.heardAt) showHeard(v.heard, v.waypoint);
   if (v.id && (v.id === 'offer' || v.id === 'missed')) $('db').classList.remove('hidden');   // 도착 · 정차 때 제안은 해설 글 상자에
   if ($('db').classList.contains('hidden')) return;
   if (v.id !== VOICE.id) { VOICE.id = v.id; VOICE.seen = []; VOICE.quiz = VOICE.nextQuiz; VOICE.nextQuiz = false; }
@@ -886,15 +908,10 @@ async function scenario(){
   cap('도착 15km 전, 지금 열리는 축제를 찾아 들를 곳을 제안합니다');
   stop('gyeryong', 'done'); stop('naejang', 'done');
   eta('25분', '11:30', '24km'); $('clock').textContent = '11:05'; car(470, 220, 30);
-  place('🎋', '담양 죽녹원', '경로에서 3분 · 대나무축제 기간');
-  doc('지금 담양은 대나무축제 기간이에요. 죽녹원은 가는 길에서 3분이면 들를 수 있어요.');
-  $('suggest').classList.add('on');
+  suggestPlace('juknok');   // 임의 자료 sample-data/stories.js events
   await wait(5200);
-  kid('가자!', '운전석 · 아빠');
+  voiceCommand('가자');      // 운전석 · 아빠 「가자!」 (앱이면 Kotlin 이 차량 신호가 켜졌을 때 내비에 경유지를 넣음)
   await wait(1400);
-  $('suggest').classList.remove('on');
-  VIA = true; renderStops(); stop('juknok', 'now');   // 경유지가 든 경로로 명소 목록을 다시 계산
-  $('wp').innerHTML = '<span class="waypt">경유 죽녹원 · </span>';
   eta('28분', '11:33', '25km');
   doc('죽녹원을 경유지로 넣었어요. 도착하면 대나무 숲길 지도를 보여 줄게요.');
   cap('"가자" 한마디로 내비 경로에 경유지가 추가됩니다');

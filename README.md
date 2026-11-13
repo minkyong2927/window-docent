@@ -30,7 +30,7 @@ gradle :app:assembleRelease
 | 가속 | WHPX |
 | 도구 | adb 37.0.1, 에뮬레이터 37.2.13, 가상 콘솔 |
 | 빌드 | GitHub Actions, JDK 17 |
-| 단위 테스트 | JVM 에서 156개, 차량 없이 돎 |
+| 단위 테스트 | JVM 에서 158개, 차량 없이 돎 |
 
 ## 3. 필요한 설정
 
@@ -82,6 +82,7 @@ gradle :app:assembleRelease
 | 2 보강 위험 구간, 못 한 이야기 | 완료, 거리 단위 확인 전 | CautionZone.kt |
 | 3 가까워지면 해설, 예정 보이기 | 완료 | NarrationSchedule.kt |
 | 기능 1 지나친 곳은 지난 뒤 한 줄 | 완료 | DocentBridge.kt |
+| 기능 2 들러볼 곳 제안, 가자로 경유지 | 완료, 내비 반영은 에뮬레이터 확인 전 | DocentBridge.kt 외 2 |
 | 4 음성 명령, 다시 말하기 | 완료, 마이크 확인 전 | VoiceCommand.kt 외 1 |
 | 5 ~ 8 경유지, 퀴즈, 기록과 QR, 외국어 | 진행 중 | |
 
@@ -101,6 +102,7 @@ gradle :app:assembleRelease
 |---|---|---|---|
 | sample-data/scenario-a.js | 경로 2, 명소 7 | 기획안 시나리오 A | 내비 경로, TourAPI |
 | sample-data/stories.js | 지나친 곳 한 줄 3 | 시나리오 A 명소 셋, 사실 숫자 없음 | TourAPI 소개글 |
+| sample-data/stories.js | 들러볼 곳 1 | 시나리오 A 죽녹원 대나무축제 | TourAPI 행사 정보 |
 
 - 공모전이 주지 않는 자료만 임의로 씀
 - 화면에도 시연 자료라고 적음
@@ -110,7 +112,7 @@ gradle :app:assembleRelease
 | SDK | 쓰는 것 | 용도 | 확인 |
 |---|---|---|---|
 | Vehicle 2.3.2 | 방향지시등, 조향각, 브레이크, 도어, 좌석 | 해설 멈춤, 모드, 기록 | 에뮬레이터 |
-| NaviHelper 3.0.5 | 다음 안내, 위험 지점, 경로 시작, 도착 | 분기점, 위험 구간, 예정 | 연결까지 |
+| NaviHelper 3.0.5 | 다음 안내, 위험 지점, 경로 시작, 도착, addWaypoint, requestRoute | 분기점, 위험 구간, 예정, 경유지 | 연결까지 |
 | FusedLocation 1.1.3 | 위치 | 속도, 해설 시작 | 에뮬레이터 |
 | TextToSpeech 3.3.1 | speak, stop, setLocale | 해설 음성, 기기 안 방식 | 에뮬레이터 |
 | SpeechToText 3.3.1 | request, stop, setLocale | 음성 명령, 기기 안 방식 | 요청까지 |

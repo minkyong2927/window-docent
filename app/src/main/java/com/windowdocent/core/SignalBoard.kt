@@ -18,7 +18,16 @@ interface LiveSignalSource : VehicleSignalSource {
 
     /** 권한을 받은 뒤 등, 못 붙은 모듈을 다시 붙여 봄 */
     fun retry() {}
+
+    /** 내비에 경유지를 넣음 (기능 2 「가자」). 돌려주는 값은 "ok" 또는 못 넣은 까닭 */
+    fun addWaypoint(place: Place): String = "이 신호 공급원은 경유지를 넣지 못함"
+
+    /** 내비에 목적지 경로를 요청함 (에뮬레이터에서 안내 값을 확인할 때). "ok" 또는 까닭 */
+    fun requestRoute(place: Place): String = "이 신호 공급원은 경로를 요청하지 못함"
 }
+
+/** 내비에 넣는 곳 하나 (경유지 · 목적지) */
+data class Place(val id: String, val name: String, val location: LatLng)
 
 /**
  * 따로따로 들어오는 차량 신호(방향지시등 · 조향각 · 브레이크 · 도어 · 좌석 · 내비 안내 · 위치)를 모아

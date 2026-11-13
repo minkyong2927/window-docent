@@ -4,6 +4,10 @@ import ai.pleos.playground.location.fused.FusedLocation
 import ai.pleos.playground.location.fused.listener.FusedLocationListener
 import ai.pleos.playground.location.fused.model.LocationData
 import ai.pleos.playground.navi.constants.NavigationStatus
+import ai.pleos.playground.navi.constants.RouteOption
+import ai.pleos.playground.navi.constants.WaypointIndex
+import ai.pleos.playground.navi.data.RequestWaypointInfo
+import ai.pleos.playground.navi.data.RouteInfo
 import ai.pleos.playground.navi.data.CameraAlert
 import ai.pleos.playground.navi.data.CautionPoint
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
@@ -30,6 +34,7 @@ import android.util.Log
 import com.windowdocent.core.Hazard
 import com.windowdocent.core.LatLng
 import com.windowdocent.core.LiveSignalSource
+import com.windowdocent.core.Place
 import com.windowdocent.core.SeatSpot
 import com.windowdocent.core.Seats
 import com.windowdocent.core.SignalBoard
@@ -75,6 +80,9 @@ class PleosSignalSource(
     private val problems = HashMap<String, MutableSet<String>>()
     private val received = HashSet<String>()
     private var started = false
+    /** 붙은 내비 (경유지 · 경로 요청용) */
+    @Volatile
+    private var navi: NaviHelper? = null
 
     override fun start(listener: (VehicleSignals, Seats) -> Unit) {
         board.onChange(listener)
@@ -103,6 +111,34 @@ class PleosSignalSource(
     override fun connected(): Boolean = synchronized(status) { PLEOS_MODULES.any { status[it] == OK } }
 
     override fun refresh() = board.republish()
+
+    /** 「가자」: 내비에 첫째 경유지로 넣음 (NaviHelper addWaypoint · 차량 제어가 아닌 내비 요청) */
+    override fun addWaypoint(place: Place): String {
+        val helper = navi ?: return "내비가 안 붙음"
+        return try {
+            helper.addWaypoint(
+                RequestWaypointInfo(place.location.lat, place.location.lng, place.name, WaypointIndex.FIRST, place.id, "", "", ""),
+            )
+            OK
+        } catch (t: Throwable) {
+            Log.w(TAG, "경유지를 못 넣음", t)
+            describe(t)
+        }
+    }
+
+    /** 목적지 경로 요청 (NaviHelper requestRoute · 추천 경로) */
+    override fun requestRoute(place: Place): String {
+        val helper = navi ?: return "내비가 안 붙음"
+        return try {
+            helper.requestRoute(
+                RouteInfo(place.location.lat, place.location.lng, null, null, place.name, place.id, "", "", RouteOption.RECOMMENDED, "", false),
+            )
+            OK
+        } catch (t: Throwable) {
+            Log.w(TAG, "경로를 못 요청함", t)
+            describe(t)
+        }
+    }
 
     /** 권한을 받은 뒤 등, 아직 못 붙은 모듈만 다시 붙여 봄 */
     override fun retry() {
@@ -332,6 +368,8 @@ class PleosSignalSource(
             },
         )
         opened += { helper.release() }
+        navi = helper
+        opened += { if (navi === helper) navi = null }
         helper.addListener(events)
         opened += { helper.removeListener(events) }
     }

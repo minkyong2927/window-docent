@@ -10,6 +10,7 @@ import com.windowdocent.core.Narrator
 import com.windowdocent.core.NarrationSchedule
 import com.windowdocent.core.NarrationMode
 import com.windowdocent.core.ScheduleEntry
+import com.windowdocent.core.Place
 import com.windowdocent.core.Poi
 import com.windowdocent.core.PrototypeSignalSource
 import com.windowdocent.core.RoutePoiPlanner
@@ -74,6 +75,10 @@ class DocentBridge(
     @Volatile
     private var listening = false
     private var heard: JSONObject? = null
+    /** 지금 제안한 들러볼 곳 (기능 2 · 「가자」 를 기다림) */
+    private var suggestion: Place? = null
+    /** 마지막 경유지 요청 결과 {id, name, navi} */
+    private var waypoint: JSONObject? = null
     private var listenedForOffer = false
 
     init {
@@ -214,6 +219,7 @@ class DocentBridge(
             }
         }
         out.put("listening", listening).put("canListen", voiceInput != null).put("heard", heard ?: JSONObject.NULL)
+        out.put("suggesting", suggestion?.id ?: JSONObject.NULL).put("waypoint", waypoint ?: JSONObject.NULL)
         val s = n?.snapshot() ?: return out.toString()
         val lines = JSONArray()
         for (line in s.lines) lines.put(JSONObject().put("t", line.text).put("cut", line.cut).put("resume", line.resume))
@@ -437,9 +443,44 @@ class DocentBridge(
                     false
                 }
             }
-            Command.GO, Command.NONE -> false
+            Command.GO -> go()
+            Command.NONE -> false
         }
         heard = JSONObject().put("text", text).put("command", command.name).put("done", done).put("atMs", System.currentTimeMillis())
+    }
+
+    /**
+     * 들러볼 곳 제안 (기능 2). 입력 {"id","name","lat","lng","text"} · 제안 글을 말하고 「가자」 를 기다림. 출력은 voiceState 와 같음
+     */
+    @JavascriptInterface
+    fun suggest(requestJson: String): String {
+        val o = JSONObject(requestJson)
+        val at = latLng(o.opt("lat"), o.opt("lng"))
+        suggestion = if (at != null) Place(o.optString("id"), o.optString("name"), at) else null
+        waypoint = null
+        val text = o.optString("text")
+        if (text.isNotBlank()) narrator?.play(Narrator.Story(o.optString("id") + SUGGEST_SUFFIX, o.optString("name"), Narrator.split(text)))
+        return voiceState("{}")
+    }
+
+    /** 「가자」: 제안한 곳을 경유지로. 차량 신호가 켜져 있으면 내비(NaviHelper addWaypoint)에 넣음 */
+    private fun go(): Boolean {
+        val place = suggestion ?: return false
+        suggestion = null
+        val src = live
+        val navi = if (liveOn && src != null) src.addWaypoint(place) else "차량 신호를 켜면 내비에 넣음"
+        waypoint = JSONObject().put("id", place.id).put("name", place.name).put("navi", navi)
+        return true
+    }
+
+    /** 확인용: 내비에 목적지 경로를 요청 (에뮬레이터에서 안내 값을 받을 때). 입력 {"id","name","lat","lng"} · 출력 {"navi"} */
+    @JavascriptInterface
+    fun route(requestJson: String): String {
+        val o = JSONObject(requestJson)
+        val at = latLng(o.opt("lat"), o.opt("lng")) ?: return JSONObject().put("navi", "좌표 없음").toString()
+        val src = live
+        val navi = if (liveOn && src != null) src.requestRoute(Place(o.optString("id"), o.optString("name"), at)) else "차량 신호가 꺼져 있음"
+        return JSONObject().put("navi", navi).toString()
     }
 
     /** 화면을 닫을 때 신호 공급원 · 말하는 장치를 멈춤 */
@@ -500,6 +541,8 @@ class DocentBridge(
         const val PASSED_WITHIN_M = 3000.0
         /** 지나친 곳 한 줄의 이야기 id 꼬리 (자세한 이야기와 구분) */
         const val PASSED_SUFFIX = ":passed"
+        /** 들러볼 곳 제안 글의 이야기 id 꼬리 */
+        const val SUGGEST_SUFFIX = ":suggest"
 
         fun poisOf(v: Any?): List<Poi> = list(v).mapNotNull { p ->
             val m = p as? Map<*, *> ?: return@mapNotNull null

@@ -122,6 +122,8 @@ class DocentBridgeTest {
     // ── 실제 차량 신호 켜기 · 끄기 (Docent.live · liveState) ─────────────────────
     /** 실제 차량 신호 공급원 흉내 (Pleos SDK 대신) */
     private class FakeLive(var ok: Boolean = true) : LiveSignalSource {
+        val waypoints = ArrayList<com.windowdocent.core.Place>()
+        override fun addWaypoint(place: com.windowdocent.core.Place): String { waypoints += place; return "ok" }
         var listener: ((VehicleSignals, Seats) -> Unit)? = null
         var signals = VehicleSignals()
         var seats = Seats()
@@ -564,5 +566,35 @@ class DocentBridgeTest {
         speaker.finish(); speaker.finish()
         bridge.progress("""{"travelledM":127500,"speedKmh":90}""")     // 지나서 3km 넘음
         assertEquals("ko:둘째 문장이에요.", speaker.said.last())
+    }
+
+    // ── 들러볼 곳 제안과 「가자」 (기능 2 · 마-2) ─────────────────────────────────────
+    private val juknok = """{"id":"juknok","name":"죽녹원","lat":35.327,"lng":126.986,"text":"죽녹원은 가는 길에서 3분이에요. 들러 갈까요?"}"""
+
+    @Test fun suggestionIsSpokenAndGoAddsTheWaypointToTheNavi() {
+        val speaker = FakeSpeaker()
+        val live = FakeLive()
+        val bridge = DocentBridge(liveFactory = { live }, speaker = speaker)
+        bridge.live("""{"on":true}""")
+        val v = JSONObject(bridge.suggest(juknok))
+        assertEquals("ko:죽녹원은 가는 길에서 3분이에요.", speaker.said.last())
+        assertEquals("juknok", v.getString("suggesting"))
+        val r = JSONObject(bridge.command("""{"text":"가자!"}"""))
+        assertEquals("GO", r.getJSONObject("heard").getString("command"))
+        assertTrue(r.getJSONObject("heard").getBoolean("done"))
+        assertEquals("ok", r.getJSONObject("waypoint").getString("navi"))
+        assertEquals(listOf("juknok"), live.waypoints.map { it.id })
+        assertEquals(35.327, live.waypoints[0].location.lat, 1e-9)
+        assertTrue(r.isNull("suggesting"))
+        assertFalse(JSONObject(bridge.command("""{"text":"가자"}""")).getJSONObject("heard").getBoolean("done"))   // 제안이 없으면 할 일 없음
+    }
+
+    @Test fun goWithoutVehicleSignalsStillSwitchesTheScreenOnly() {
+        val bridge = DocentBridge()
+        bridge.suggest(juknok)
+        val r = JSONObject(bridge.command("""{"text":"들르자"}"""))
+        assertTrue(r.getJSONObject("heard").getBoolean("done"))
+        assertEquals("차량 신호를 켜면 내비에 넣음", r.getJSONObject("waypoint").getString("navi"))
+        assertEquals("차량 신호가 꺼져 있음", JSONObject(bridge.route(juknok)).getString("navi"))
     }
 }
