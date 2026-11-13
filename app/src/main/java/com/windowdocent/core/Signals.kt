@@ -24,6 +24,8 @@ enum class NavGuidance {
  * - doorOpen          Vehicle Door.registerDoorPosition
  * - cautionZone       NaviHelper onCautionPointInfo · onCameraAlert → CautionZone (위험 구간 안이면 그 종류 이름)
  * - arrived           NaviHelper onDestinationArrived · onWayPointArrived (도착한 뒤 잠깐 참)
+ * - position          FusedLocation 마지막 위치 (경로에 투영해 해설 예정 · 시작 판단에 씀)
+ * - routeStart        NaviHelper onRouteStarted (경로 안내 시작 · 거리 · 시간 → 해설 예정 다시 계산)
  */
 data class VehicleSignals(
     val speedKmh: Double? = null,
@@ -37,7 +39,14 @@ data class VehicleSignals(
     val cautionZone: String? = null,
     /** 목적지 · 경유지에 막 도착함 */
     val arrived: Boolean = false,
+    /** 마지막으로 받은 차 위치 (못 받았으면 null) */
+    val position: LatLng? = null,
+    /** 마지막 경로 안내 시작 (못 받았으면 null) */
+    val routeStart: RouteStart? = null,
 )
+
+/** 경로 안내 시작 (NaviHelper RouteStartInfo 의 distance · duration · 받은 시각) */
+data class RouteStart(val atMs: Long, val distanceM: Double, val durationSec: Double)
 
 /** 좌석 착석 정보 (Vehicle Seat.registerSeatOccupancy · 조수석 ROW_1_RIGHT, 뒷좌석 ROW_2_*) */
 data class Seats(

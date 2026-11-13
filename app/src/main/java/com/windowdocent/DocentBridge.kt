@@ -6,8 +6,12 @@ import com.windowdocent.core.LatLng
 import com.windowdocent.core.LiveSignalSource
 import com.windowdocent.core.NavGuidance
 import com.windowdocent.core.Narrator
+import com.windowdocent.core.NarrationSchedule
 import com.windowdocent.core.Poi
 import com.windowdocent.core.PrototypeSignalSource
+import com.windowdocent.core.RoutePoiPlanner
+import com.windowdocent.core.RouteStart
+import com.windowdocent.core.ScheduleStatus
 import com.windowdocent.core.Speaker
 import com.windowdocent.core.TurnSignal
 import org.json.JSONArray
@@ -16,7 +20,7 @@ import org.json.JSONObject
 /**
  * 프로토타입 화면(WebView) ↔ Kotlin 엔진 다리. 화면은 JSON 문자열만 주고받고, 판단은 전부 DocentEngine 이 함.
  * 화면에서는 window.Docent 로 보임: Docent.evaluate(...) · Docent.plan(...) · Docent.narrate(...) · Docent.live(...) · Docent.liveState(...)
- *   · Docent.speak(...) · Docent.voiceState(...) · Docent.voiceStop(...) · Docent.voiceAnswer(...)
+ *   · Docent.speak(...) · Docent.voiceState(...) · Docent.voiceStop(...) · Docent.voiceAnswer(...) · Docent.schedule(...) · Docent.progress(...)
  *
  * 신호는 기본이 화면의 시연용 신호 판(PrototypeSignalSource). 화면에서 「차량 신호」 를 켜면 실제 차량 신호(LiveSignalSource ·
  * 앱에서는 Pleos SDK 의 PleosSignalSource)로 바꾸고, 끄면 시연 신호로 돌아감.
@@ -42,6 +46,17 @@ class DocentBridge(
     @Volatile
     private var liveOn = false
     private var wasArrived = false
+
+    /** 해설 예정 (경로를 정할 때 만들고, 차가 나아갈 때마다 progress 로 시작 판단) */
+    private var schedule: NarrationSchedule? = null
+    private var scheduleRoute: List<LatLng> = emptyList()
+    private var scheduleTexts: Map<String, String> = emptyMap()
+    private var schedulePois: List<Poi> = emptyList()
+    private var scheduleAvgKmh = DEFAULT_SPEED_KMH
+    private var departMs = 0L
+    private var travelledM = 0.0
+    private var lastRouteStart: RouteStart? = null
+    private val planner = RoutePoiPlanner()
 
     init {
         engine.attach(source)
@@ -198,6 +213,105 @@ class DocentBridge(
         return voiceState("{}")
     }
 
+    /**
+     * 경로를 정한 순간: 해설 예정표를 만듦 (추가 1). 명소 선정은 plan 과 같고, 명소마다 해설 글(text)을 같이 받아 둠.
+     * 입력 {"route":[[위도,경도],…],"pois":[{"id","name","lat","lng","priority","visibleM","text"}],"avgSpeedKmh":n,"departMs":n}
+     * 출력은 progress 와 같음
+     */
+    @JavascriptInterface
+    fun schedule(requestJson: String): String {
+        val req = toMap(JSONObject(requestJson))
+        val route = list(req["route"]).mapNotNull { p -> list(p).let { latLng(it.getOrNull(0), it.getOrNull(1)) } }
+        val pois = poisOf(req["pois"])
+        scheduleTexts = list(req["pois"]).mapNotNull { p ->
+            val m = p as? Map<*, *> ?: return@mapNotNull null
+            val id = m["id"] as? String ?: return@mapNotNull null
+            id to (m["text"] as? String ?: "")
+        }.toMap()
+        scheduleRoute = route
+        schedulePois = pois
+        scheduleAvgKmh = (req["avgSpeedKmh"] as? Number)?.toDouble() ?: DEFAULT_SPEED_KMH
+        departMs = (req["departMs"] as? Number)?.toLong() ?: System.currentTimeMillis()
+        travelledM = 0.0
+        schedule = NarrationSchedule(engine.plan(route, pois, scheduleAvgKmh), scheduleAvgKmh)
+        return scheduleView().toString()
+    }
+
+    /**
+     * 차가 나아갈 때마다 (명소에 가까워지면 해설 시작 · 구현 3번). 예정표와 같은 시작 지점으로 판단.
+     * 입력 {"travelledM":n,"speedKmh":n} · 실제 차량 신호가 켜져 있으면 차 위치를 경로에 투영한 거리를 씀
+     * (경로 안내 시작이 오면 그 거리 · 시간으로 예정을 다시 계산)
+     * 출력 {"departMs","travelledM","count","firstAfterSec","next":{"id","name","remainSec"}|null,
+     *   "start":{"id","name","text"}|null (말하는 장치가 없을 때 화면이 말할 것),
+     *   "entries":[{"id","name","alongM","startM","sec","startAfterSec","story","status","remainSec"}]}
+     *   status = PLANNED(예정) · SPEAKING(말하는 중) · CUT(끊김) · DONE(끝) · MISSED(못 함)
+     */
+    @JavascriptInterface
+    fun progress(requestJson: String): String {
+        val sch = schedule ?: return JSONObject().put("count", 0).put("entries", JSONArray()).toString()
+        val req = toMap(JSONObject(requestJson))
+        val signals = engine.signals
+        val routeStart = signals.routeStart
+        if (liveOn && routeStart != null && routeStart != lastRouteStart) {
+            // 실제 경로 안내가 시작됨: 그 거리 · 시간으로 평균 속도를 잡고 예정을 다시 만듦
+            lastRouteStart = routeStart
+            if (routeStart.distanceM > 0 && routeStart.durationSec > 0) scheduleAvgKmh = routeStart.distanceM / routeStart.durationSec * 3.6
+            departMs = routeStart.atMs
+            schedule = NarrationSchedule(engine.plan(scheduleRoute, schedulePois, scheduleAvgKmh), scheduleAvgKmh)
+            return progress(requestJson)
+        }
+        val position = signals.position
+        travelledM = if (liveOn && position != null && scheduleRoute.size >= 2) {
+            planner.alongRouteM(scheduleRoute, position)
+        } else {
+            (req["travelledM"] as? Number)?.toDouble() ?: travelledM
+        }
+        val speedKmh = if (liveOn) signals.speedKmh else (req["speedKmh"] as? Number)?.toDouble()
+        val tick = sch.tick(travelledM)
+        var start: JSONObject? = null
+        tick.start?.let { e ->
+            val story = Narrator.Story(e.id, e.name, Narrator.split(scheduleTexts[e.id].orEmpty()))
+            val n = narrator
+            if (n != null) n.play(story)
+            else start = JSONObject().put("id", e.id).put("name", e.name).put("text", scheduleTexts[e.id].orEmpty())
+        }
+        for (e in tick.missed) narrator?.miss(Narrator.Story(e.id, e.name, Narrator.split(scheduleTexts[e.id].orEmpty())))
+        return scheduleView(speedKmh).put("start", start ?: JSONObject.NULL).toString()
+    }
+
+    private fun scheduleView(speedKmh: Double? = null): JSONObject {
+        val sch = schedule ?: return JSONObject().put("count", 0).put("entries", JSONArray())
+        val snap = narrator?.snapshot()
+        val entries = JSONArray()
+        for (e in sch.entries) {
+            val st = sch.status(e, travelledM)
+            val status = when {
+                snap?.storyId == e.id && (snap.state == Narrator.State.SPEAKING || snap.state == Narrator.State.WAITING) -> "SPEAKING"
+                snap?.storyId == e.id && snap.state == Narrator.State.PAUSED -> "CUT"
+                snap?.missed?.any { it.storyId == e.id } == true -> "MISSED"
+                st == ScheduleStatus.STARTED -> "DONE"
+                st == ScheduleStatus.PASSED -> if (narrator != null) "DONE" else "MISSED"
+                else -> "PLANNED"
+            }
+            entries.put(
+                JSONObject()
+                    .put("id", e.id).put("name", e.name)
+                    .put("alongM", Math.round(e.alongM)).put("startM", Math.round(e.startM))
+                    .put("sec", e.sec).put("startAfterSec", Math.round(e.startAfterSec)).put("story", e.story)
+                    .put("status", status)
+                    .put("remainSec", Math.round(sch.secondsUntil(e, travelledM, speedKmh)))
+            )
+        }
+        val next = sch.next(travelledM)
+        return JSONObject()
+            .put("departMs", departMs)
+            .put("travelledM", Math.round(travelledM))
+            .put("count", sch.entries.size)
+            .put("firstAfterSec", sch.entries.firstOrNull()?.let { Math.round(it.startAfterSec) } ?: JSONObject.NULL)
+            .put("next", next?.let { JSONObject().put("id", it.id).put("name", it.name).put("remainSec", Math.round(sch.secondsUntil(it, travelledM, speedKmh))) } ?: JSONObject.NULL)
+            .put("entries", entries)
+    }
+
     /** 화면을 닫을 때 신호 공급원 · 말하는 장치를 멈춤 */
     fun close() {
         liveOn = false
@@ -214,18 +328,7 @@ class DocentBridge(
     fun plan(requestJson: String): String {
         val req = toMap(JSONObject(requestJson))
         val route = list(req["route"]).mapNotNull { p -> list(p).let { latLng(it.getOrNull(0), it.getOrNull(1)) } }
-        val pois = list(req["pois"]).mapNotNull { p ->
-            val m = p as? Map<*, *> ?: return@mapNotNull null
-            val id = m["id"] as? String ?: return@mapNotNull null
-            val location = latLng(m["lat"], m["lng"]) ?: return@mapNotNull null
-            Poi(
-                id = id,
-                name = m["name"] as? String ?: id,
-                location = location,
-                priority = (m["priority"] as? Number)?.toInt() ?: 0,
-                visibleM = (m["visibleM"] as? Number)?.toDouble(),
-            )
-        }
+        val pois = poisOf(req["pois"])
         val avgSpeedKmh = (req["avgSpeedKmh"] as? Number)?.toDouble() ?: DEFAULT_SPEED_KMH
 
         val out = JSONArray()
@@ -262,6 +365,19 @@ class DocentBridge(
 
     private companion object {
         const val DEFAULT_SPEED_KMH = 80.0
+
+        fun poisOf(v: Any?): List<Poi> = list(v).mapNotNull { p ->
+            val m = p as? Map<*, *> ?: return@mapNotNull null
+            val id = m["id"] as? String ?: return@mapNotNull null
+            val location = latLng(m["lat"], m["lng"]) ?: return@mapNotNull null
+            Poi(
+                id = id,
+                name = m["name"] as? String ?: id,
+                location = location,
+                priority = (m["priority"] as? Number)?.toInt() ?: 0,
+                visibleM = (m["visibleM"] as? Number)?.toDouble(),
+            )
+        }
 
         fun list(v: Any?): List<Any?> = v as? List<*> ?: emptyList()
 

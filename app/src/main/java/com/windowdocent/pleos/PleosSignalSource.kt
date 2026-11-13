@@ -7,6 +7,7 @@ import ai.pleos.playground.navi.constants.NavigationStatus
 import ai.pleos.playground.navi.data.CameraAlert
 import ai.pleos.playground.navi.data.CautionPoint
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
+import ai.pleos.playground.navi.data.RouteStartInfo
 import ai.pleos.playground.navi.data.TBTInfo
 import ai.pleos.playground.navi.data.WaypointArrivedInfo
 import ai.pleos.playground.navi.helper.NaviHelper
@@ -48,6 +49,8 @@ import com.windowdocent.core.VehicleSignals
  * | 다음 안내까지 거리    | NaviHelper onTBTInfo                                              |
  * | 위험 구간            | NaviHelper onCautionPointInfo · onCameraAlert (남은 거리 → CautionZone) |
  * | 도착                 | NaviHelper onDestinationArrived · onWayPointArrived               |
+ * | 경로 안내 시작        | NaviHelper onRouteStarted (거리 · 시간 → 해설 예정 다시 계산)          |
+ * | 차 위치              | FusedLocation (경로에 투영해 해설 시작 지점을 지났는지)                 |
  * | 속도 · 정차          | FusedLocation registerFusedLocationCallback 의 위치 변화로 계산     |
  * | 내비 안내 음성 중     | SDK 에 값이 없어 앱이 넘겨 준 감시(voiceWatch · 앱의 NaviVoiceWatcher = AudioManager)     |
  *
@@ -303,6 +306,11 @@ class PleosSignalSource(
             override fun onCameraAlert(cameraAlerts: List<CameraAlert>) {
                 got(NAVI)
                 hazards(camera = cameraAlerts.map { Hazard(it.id, it.type.name, it.remainDistance.toDouble()) })
+            }
+
+            override fun onRouteStarted(routeStartInfo: RouteStartInfo) {
+                got(NAVI)
+                board.routeStarted(routeStartInfo.distance.toDouble(), routeStartInfo.duration.toDouble())
             }
 
             override fun onRouteEnded() = board.clearGuidance()

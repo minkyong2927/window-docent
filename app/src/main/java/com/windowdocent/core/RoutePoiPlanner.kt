@@ -74,6 +74,14 @@ class RoutePoiPlanner(private val config: DocentConfig = DocentConfig()) {
         }
     }
 
+    /** 지금 위치가 경로를 따라 출발점에서 몇 m 왔는지 (차 위치를 경로에 투영 · 해설 예정과 시작 판단에 씀) */
+    fun alongRouteM(route: List<LatLng>, position: LatLng): Double {
+        require(route.size >= 2) { "경로 좌표는 2개 이상" }
+        val cumulative = DoubleArray(route.size)
+        for (i in 1 until route.size) cumulative[i] = cumulative[i - 1] + distanceM(route[i - 1], route[i])
+        return project(route, cumulative, position).first
+    }
+
     /** 점을 경로에 투영 → (경로를 따라 간 거리, 옆으로 떨어진 거리) */
     private fun project(route: List<LatLng>, cumulative: DoubleArray, p: LatLng): Pair<Double, Double> {
         var bestAlong = 0.0

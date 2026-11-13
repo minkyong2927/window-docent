@@ -21,6 +21,7 @@ interface Speaker {
  * - 한 문장(ONE_LINE: 분기점 접근): 지금 문장은 끝까지, 새로 시작하는 것은 한 문장까지
  * - 여행 기록(TRIP_RECORD: 도어 열림): 해설을 끝냄 (멈춰 있던 해설의 남은 문장은 못 한 이야기에)
  * - 못 한 이야기 = 두 번 끊겨 넘어간 문장 · 멈춘 채 다음 해설로 넘어가거나 도어가 열려 남은 문장 (말하던 중 도어가 열린 것은 넣지 않음)
+ *   · 시작도 못 하고 지나친 예정 해설 (miss)
  * - 못 한 이야기 모아 듣기: 정차가 5초 넘게 이어지면 한 번, 도착하면 한 번 더 「아까 못 한 이야기가 n개 있어요…」 를 묻고,
  *   응이면 차례로 말함 · 나중에면 넘김. 화면에 따로 다시 듣기 단추는 두지 않음
  * Pleos TextToSpeech 에는 일시정지가 없어(speak · stop 만) 문장마다 따로 보내고 어느 문장에서 끊겼는지 기억함.
@@ -149,6 +150,13 @@ class Narrator(
         if (arrivalOfferDone || missed.isEmpty()) return
         arrivalOfferDone = true
         wantOffer = true
+        offerIfFree()
+    }
+
+    /** 시작도 못 한 예정 해설을 못 한 이야기에 (NarrationSchedule 이 지나쳤다고 알려 줄 때) */
+    @Synchronized
+    fun miss(story: Story) {
+        addMissed(story, story.sentences)
         offerIfFree()
     }
 

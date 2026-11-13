@@ -44,10 +44,11 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 | 1. 실제 차량 신호 받기 | 코드 연결 | `pleos/PleosSignalSource`, `core/SignalBoard` `SpeedEstimator`, `NaviVoiceWatcher` | SDK와 컴파일, 단위 테스트. 에뮬레이터 실행은 2차 |
 | 2. 음성으로 해설하기 (바로 멈추고 이어 말하기) | 코드 연결 | `core/Narrator`, `pleos/PleosSpeaker`, `AppSpeaker` | SDK와 컴파일, 단위 테스트, 브라우저 시연에서 소리. 에뮬레이터 실행은 2차 |
 | 2 보강. 위험 구간 멈춤 · 두 번 끊긴 문장은 넘어감 · 못 한 이야기 모아 듣기 | 코드 연결 | `core/CautionZone`, `core/Narrator`, `pleos/PleosSignalSource` | SDK와 컴파일, 단위 테스트, 브라우저 시연(위험 구간 · 🎤 응 / 나중에 단추). 위험 지점 남은 거리 단위(미터로 봄)는 에뮬레이터에서 확인 |
-| 3 ~ 8. 명소 접근 해설, 음성 명령, 경유지 추가, 가족 퀴즈, 여행 기록과 QR, 외국어 내용 | 진행 중 | | |
+| 3. 명소에 가까워지면 해설 시작 + 해설 예정 보여 주기 | 코드 연결 | `core/NarrationSchedule`, `core/RoutePoiPlanner`(경로 위 진행 거리), `pleos/PleosSignalSource`(위치 · 경로 안내 시작) | 단위 테스트(시연 경로 예정값 고정), 브라우저 시연(예정표 · 주행 흉내). 에뮬레이터 실행은 2차 |
+| 4 ~ 8. 음성 명령, 경유지 추가, 가족 퀴즈, 여행 기록과 QR, 외국어 내용 | 진행 중 | | |
 | 관광 데이터(TourAPI)·학습 모드·에뮬레이터 실행 확인 | 2차 (~12/2) | | |
 
-- 단위 테스트 121개
+- 단위 테스트 132개
 - 앱에서는 해설 방식·청중 모드·명소 순서와 해설 길이·사실 검증·해설 음성을 모두 Kotlin 엔진이 계산 (`DocentBridge` → `DocentEngine`, `Narrator`), 화면 아래에 '판단 · Kotlin 엔진' 표시. 브라우저로 열면 같은 규칙의 JS가 대신함
 
 ## 개요
@@ -74,6 +75,7 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 | `AudienceSelector` | 좌석 착석·승객 언어로 운전자·가족·외국어 모드 자동 전환 |
 | `FactGuard` | 환각 차단: LLM 출력에 사실 필드에 없는 숫자(연도 등)가 있으면 거부하고 사실 원문으로 대체 |
 | `Narrator` | 해설을 문장마다 소리로: 멈춤(방향지시등·큰 조향·내비 음성·위험 구간)이면 말하던 중이라도 바로 끊고, 풀리면 "아까 하던 이야기 이어서 할게요" 뒤 끊긴 문장을 처음부터. 같은 문장이 두 번 끊기면 다음 문장으로 넘어가고 그 문장은 못 한 이야기에 담음. 정차가 5초 넘거나 도착하면 "아까 못 한 이야기가 n개 있어요"를 한 번 묻고 응이면 차례로 말함. 분기점 접근은 한 문장까지, 도어 열림이면 끝 |
+| `NarrationSchedule` | 해설 예정과 시작 판단: 해설이 명소 옆에서 끝나도록 해설 길이만큼 앞을 시작 지점으로(앞 해설과 겹치지 않게), 예정 시각과 실제 시작이 같은 시작 지점을 씀. 시작 못 하고 지나친 해설은 못 한 이야기로 |
 | `CautionZone` | 위험 구간 판단: 내비가 알려 준 위험 지점(13종) · 어린이 보호구역 카메라(2종)가 300m 안이면 멈춤, 지난 뒤 300m(속도를 모르면 20초) 더, 위험 지점 신호가 15초 안 오면 풀림. 과속방지턱·단속 카메라 등 10종은 보지 않음 |
 
 - 엔진은 `DocentEngine` 한 곳에서 부르고, 차량 신호는 `VehicleSignalSource`로 들어옴: 기본은 프로토타입 신호 판을 읽는 `PrototypeSignalSource`, 화면의 '차량 신호'를 켜면 Pleos Connect SDK에서 받는 `PleosSignalSource`
@@ -93,8 +95,8 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 | NaviHelper | `onCautionPointInfo`(CautionPoint 종류·남은 거리), `onCameraAlert`(CameraAlert 종류·남은 거리) | 위험 구간 멈춤 | 코드 연결 (남은 거리 단위는 미터로 봄 · 에뮬레이터 확인 전) |
 | NaviHelper | `onDestinationArrived`, `onWayPointArrived` | 도착 때 못 한 이야기 제안 | 코드 연결 |
 | NaviHelper | `onDrivingInfo`(남은 거리·시간), `addWaypoint` | 해설 길이, "가자" 경유지 추가 | 계획 |
-| FusedLocation | `registerFusedLocationCallback`(위치) | 속도 계산(Vehicle SDK에 차속 없음), 정차 판단 | 코드 연결 |
-| FusedLocation | `addProximityAlert` | 명소 반경 진입 | 계획 |
+| FusedLocation | `registerFusedLocationCallback`(위치) | 속도 계산(Vehicle SDK에 차속 없음), 정차 판단, 해설 시작 판단(위치를 경로에 투영) | 코드 연결 |
+| NaviHelper | `onRouteStarted`(거리·시간) | 경로 안내가 시작되면 해설 예정 다시 계산 | 코드 연결 |
 | TextToSpeech | `speak`(문장마다), `stop`, `setLocale`, `EventListener`(onDone·onError) | 해설 음성. 일시정지가 없어 멈춤·이어 말하기는 `Narrator`가 문장 단위로 | 코드 연결 |
 | SpeechToText | 승객 발화 인식 | 언어 선택, 퀴즈 답, "가자" 명령 | 계획 |
 
@@ -102,13 +104,14 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 - 해설 문장·퀴즈 생성(LLM)은 Pleos SDK를 쓰지 않음: TourAPI 사실 필드를 언어·길이·대상에 맞게 미리 문장화해 `FactGuard`로 검증해 두고, 차 안에서는 TextToSpeech로 재생
 - 내비 안내 음성이 나오는 중인지는 NaviHelper에 없어 안드로이드 `AudioManager` 재생 정보(용도가 길 안내 음성인 소리)로 판단 (`NaviVoiceWatcher`)
 - 차속은 Vehicle SDK에 없어 FusedLocation 위치 변화로 계산 (`SpeedEstimator`), 못 구하는 동안은 '모름'
-- 경로 좌표열은 NaviHelper가 주지 않음(출발·경유·도착 점만)
+- 경로 좌표열은 NaviHelper가 주지 않음(출발·경유·도착 점만) → 1차 해설 예정은 앱이 가진 시연 경로로 계산하고, 명소에 가까워졌는지는 위치를 그 경로에 투영해 판단(반경 진입 알림 `addProximityAlert` 대신)
 
 ## 시연
 
 - 시연 영상: [docs/demo.webm](docs/demo.webm) (약 1분, 무음, 시나리오: 가족 여행 서울→담양)
 - 해설은 소리로도 나옴('소리 켬/끔' 단추 · 브라우저 음성). 자동 시연의 분기점 장면에서 내비 음성이 나오면 말하던 해설이 바로 끊기고, 지나간 뒤 "아까 하던 이야기 이어서 할게요"와 함께 끊긴 문장부터 다시 말함
 - 신호 단추: 방향지시등·내비 음성·브레이크·속도·뒷좌석·승객 언어·도어로 판단이 바뀌는 것을 확인, '사실 검증'은 틀린 연도가 든 초안이 사실 원문으로 바뀌는 것을 보여 줌
+- 예정표: 경로를 정한 순간 오른쪽에 "오늘 해설 4곳 · 첫 해설은 50분 뒤"와 명소마다 출발 뒤 몇 분 · 시각 · 이야기/한 줄 · 상태(예정 · 말하는 중 · 끊김 · 끝 · 못 함). '주행 흉내'를 누르면 시연 경로를 따라 달리며 예정표가 "다음 해설: 천안삼거리 · n분 뒤" 한 줄로 접히고, 시작 지점에 오면 그 명소 해설을 시작함 (한 줄을 누르면 펴고 접음)
 - '위험 구간': 어린이 보호구역 200m 앞을 켜고 끔. 켜면 해설이 바로 멈추고 내비 칸에 위험 지점이 보임, 끄면 이어 말함 (자동 시연 장면은 그대로)
 - 못 한 이야기: 같은 문장이 두 번 끊기면(방향지시등을 두 번 켰다 끔) 그 문장은 넘어가고, 정차 5초가 지나면 "아까 못 한 이야기가 1개 있어요. 지금 들려드릴까요?"를 묻고 '🎤 응' '🎤 나중에'(음성 명령 흉내) 단추가 나옴
 - '차량 신호': 앱에서 누르면 Pleos SDK 신호로 판단하고 신호 판에 실제 값과 모듈별 연결 상태(차량·내비·위치·안내 음성)를 보여 줌. 브라우저나 Pleos 기기가 아닌 곳에서는 안내 글을 띄우고 시연 신호를 그대로 씀
@@ -126,6 +129,7 @@ app/src/main/java/com/windowdocent/
     FactGuard.kt             사실 필드 밖 숫자 차단
     Narrator.kt              해설을 문장마다 말하고 멈춤·이어 말하기·못 한 이야기
     CautionZone.kt           위험 구간 판단 (300m 앞 · 지난 뒤 300m · 15초)
+    NarrationSchedule.kt     해설 예정 · 시작 지점에서 해설 시작
     VehicleSignalSource.kt   신호 공급원 인터페이스
     PrototypeSignalSource.kt 프로토타입 신호 판을 읽는 공급원 (기본)
     SignalBoard.kt           따로 오는 차량 신호를 모아 한 벌로 (실제 신호 공급원 LiveSignalSource)

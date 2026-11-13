@@ -78,6 +78,7 @@ class DocentBridgeTest {
                 val got = planned.getJSONObject(i)
                 assertEquals("$planKey[$i] 순서", want.getString("id"), got.getString("id"))
                 assertEquals("$planKey[$i] 해설 길이", want.getInt("sec"), got.getInt("sec"))
+                assertEquals("$planKey[$i] 경로상 위치(해설 예정에 씀)", want.getLong("alongM"), got.getLong("alongM"))
             }
         }
     }
@@ -356,5 +357,61 @@ class DocentBridgeTest {
         v = JSONObject(bridge.voiceAnswer("""{"yes":true}"""))  // 응
         assertEquals("ko:첫 문장이에요.", speaker.said.last())
         assertEquals(0, v.getJSONArray("missed").length())
+    }
+
+    // ── 해설 예정 · 명소에 가까워지면 시작 (Docent.schedule · progress) ─────────────────
+
+    private fun demoScheduleRequest(): JSONObject {
+        val demo = prototypeDemoData()
+        val pois = JSONArray()
+        val all = demo.getJSONArray("pois")
+        for (i in 0 until all.length()) if (!all.getJSONObject(i).optBoolean("viaOnly")) pois.put(all.getJSONObject(i).put("text", "첫 문장이에요. 둘째 문장이에요."))
+        return JSONObject().put("route", demo.getJSONArray("route")).put("pois", pois)
+            .put("avgSpeedKmh", demo.getDouble("avgSpeedKmh")).put("departMs", 0)
+    }
+
+    @Test fun demoRouteScheduleIsFixed() {
+        // 시연 경로(서울 → 담양 · 평균 90km/h) 예정표: 명소 · 시작 예상(출발 뒤 초) · 길이 · 방식 (구글 시트 추가 1 출력값과 같음)
+        val r = JSONObject(DocentBridge().schedule(demoScheduleRequest().toString()))
+        val e = r.getJSONArray("entries")
+        val got = (0 until e.length()).map { e.getJSONObject(it).let { x -> listOf(x.getString("id"), x.getLong("startAfterSec"), x.getInt("sec"), x.getBoolean("story")) } }
+        assertEquals(
+            listOf(
+                listOf("cheonan", 3006L, 60, true),
+                listOf("gyeryong", 4901L, 60, true),
+                listOf("naejang", 9018L, 60, true),
+                listOf("meta", 10760L, 15, false),
+            ),
+            got,
+        )
+        assertEquals(4, r.getInt("count"))
+        assertEquals(3006L, r.getLong("firstAfterSec"))
+        assertEquals("cheonan", r.getJSONObject("next").getString("id"))
+    }
+
+    @Test fun progressStartsAtTheStartPointAndMissesPassedOnes() {
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker)
+        bridge.evaluate(state())
+        bridge.schedule(demoScheduleRequest().toString())
+        var r = JSONObject(bridge.progress("""{"travelledM":75000,"speedKmh":90}"""))
+        assertTrue(speaker.said.isEmpty())                         // 시작 지점(75,157m) 전
+        assertEquals(6L, r.getJSONObject("next").getLong("remainSec"))   // 157m ÷ 25m/s
+        r = JSONObject(bridge.progress("""{"travelledM":75200,"speedKmh":90}"""))
+        assertEquals("ko:첫 문장이에요.", speaker.said.last())         // 천안삼거리 해설 시작
+        assertEquals("SPEAKING", r.getJSONArray("entries").getJSONObject(0).getString("status"))
+        r = JSONObject(bridge.progress("""{"travelledM":124500,"speedKmh":90}"""))   // 계룡산 시작 지점 · 명소를 다 지나침
+        val entries = r.getJSONArray("entries")
+        assertEquals("MISSED", entries.getJSONObject(1).getString("status"))
+        assertEquals("gyeryong", JSONObject(bridge.voiceState("{}")).getJSONArray("missed").getJSONObject(0).getString("id"))
+        assertEquals("naejang", r.getJSONObject("next").getString("id"))
+    }
+
+    @Test fun withoutSpeakerProgressHandsTheTextToTheScreen() {
+        val bridge = DocentBridge()
+        bridge.schedule(demoScheduleRequest().toString())
+        val r = JSONObject(bridge.progress("""{"travelledM":75200}"""))
+        assertEquals("cheonan", r.getJSONObject("start").getString("id"))
+        assertEquals("첫 문장이에요. 둘째 문장이에요.", r.getJSONObject("start").getString("text"))
     }
 }

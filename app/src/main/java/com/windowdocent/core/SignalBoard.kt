@@ -41,6 +41,8 @@ class SignalBoard(
     private var guidanceDistanceM: Double? = null
     private var naviSpeaking = false
     private var arrivedAtMs: Long? = null
+    private var lastPosition: LatLng? = null
+    private var routeStart: RouteStart? = null
     private var listener: ((VehicleSignals, Seats) -> Unit)? = null
 
     fun onChange(listener: ((VehicleSignals, Seats) -> Unit)?) {
@@ -85,7 +87,13 @@ class SignalBoard(
     fun arrived() = change { arrivedAtMs = clock() }
 
     /** 새 위치. 위치 변화로 속도를 계산 */
-    fun location(position: LatLng, timeMs: Long) = change { speed.update(position, timeMs) }
+    fun location(position: LatLng, timeMs: Long) = change {
+        speed.update(position, timeMs)
+        lastPosition = position
+    }
+
+    /** 경로 안내 시작 (거리 m · 시간 초) */
+    fun routeStarted(distanceM: Double, durationSec: Double) = change { routeStart = RouteStart(clock(), distanceM, durationSec) }
 
     fun signals(): VehicleSignals = synchronized(lock) { signalsLocked() }
 
@@ -111,6 +119,8 @@ class SignalBoard(
             doorOpen = openDoors.isNotEmpty(),
             cautionZone = caution.active(now, kmh),
             arrived = arrivedAtMs?.let { now - it < ARRIVED_MS } == true,
+            position = lastPosition,
+            routeStart = routeStart,
         )
     }
 
