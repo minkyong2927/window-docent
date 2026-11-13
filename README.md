@@ -87,6 +87,7 @@ gradle :app:assembleRelease
 | 여행 기록, 들은 곳, 퀴즈, 들른 곳, 멈춤, 못 들은 이야기, QR | 완료, 휴대폰 스캔은 확인 전 | TripRecord.kt 외 3 |
 | 기능 4 외국어 승객 해설, 한국어 한마디, 내릴 때 QR | 완료 | DocentBridge.kt 외 1 |
 | 기능 5 학습 모드, 공부할 언어 해설, 복습 퀴즈 | 완료 | DocentBridge.kt 외 1 |
+| 데이터 1, 2 관광지 자료 미리 저장, 미리 쓴 문장과 사실 검증 | 완료, TourAPI 연동은 2차 | sample-data 외 1 |
 | 4 음성 명령, 다시 말하기 | 완료, 마이크 확인 전 | VoiceCommand.kt 외 1 |
 | 5 ~ 8 경유지, 퀴즈, 기록과 QR, 외국어 | 진행 중 | |
 
@@ -110,6 +111,7 @@ gradle :app:assembleRelease
 | sample-data/stories.js | 퀴즈 3 | 지나친 곳 한 줄 안의 낱말이 답 | TourAPI 사실로 만든 문제 |
 | sample-data/stories.js | 외국어 해설 3, 한국어 한마디 3 | 같은 명소 셋을 영어, 스페인어로, 인사 감사 맛 표현 | TourAPI 다국어 소개글 |
 | sample-data/stories.js | 복습 퀴즈 3 | 가족 퀴즈 셋을 공부할 언어로 | TourAPI 사실로 만든 문제 |
+| sample-data/stories.js | 미리 쓴 문장 3 | 같은 사실을 아이, 어른, 영어 승객용으로, 사실 검증 셋 다 통과 | TourAPI 사실로 출발 전에 만든 문장 |
 
 - 공모전이 주지 않는 자료만 임의로 씀
 - 화면에도 시연 자료라고 적음
@@ -131,6 +133,7 @@ gradle :app:assembleRelease
 - 차속은 Vehicle SDK 에 없어 위치 변화로 계산
 - 경로 좌표는 NaviHelper 가 주지 않아 시연 경로를 씀
 - 해설 문장 생성에 LLM SDK 를 쓰지 않고 미리 쓴 문장을 사실 검증
+- 자료는 모두 앱 안에 들어 있어 통신 없이 재생
 
 ## 엔진
 

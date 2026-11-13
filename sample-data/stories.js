@@ -36,6 +36,14 @@ window.SAMPLE_STORIES = {
     naejang: { en: { question: 'In which season is Naejangsan most famous?', must: ['autumn|fall'], right: 'Correct! In autumn.', wrong: 'Good try. The answer is autumn.' },
                es: { question: '¿En qué estación es más famoso Naejangsan?', must: ['otoño|otono'], right: '¡Correcto! En otoño.', wrong: 'Casi. La respuesta es otoño.' } }
   },
+  // 데이터 2 · 미리 써 둔 해설 문장 (말투 · 길이 · 언어 예 3개) · 기준: scenario-a.js 의 사실 한 줄(계룡산 국립공원 1968년)을
+  //   아이 · 어른 · 영어 승객용으로 다르게 씀, 숫자는 사실 자료에 있는 것만. 화면의 사실 검증 단추가 FactGuard 로 검사함(결과: 셋 다 통과)
+  // 실서비스에서는: TourAPI 사실 필드로 이런 문장을 출발 전에 미리 만들어 두고 같은 검사를 거쳐 저장
+  styles: [
+    { who: '아이', text: '계룡산은 1968년에 국립공원이 됐어요. 용이랑 닭이 이름에 숨어 있어요!' },
+    { who: '어른', text: '계룡산은 1968년에 국립공원으로 지정된 산으로, 산줄기가 닭 볏을 쓴 용을 닮았다고 전해집니다.' },
+    { who: '영어 승객', lang: 'en', text: 'Gyeryongsan became a national park in 1968.' }
+  ],
   // 기능 2 · 들러볼 곳 (행사 중인 곳 1곳) · 기준: 기획안 시나리오 A 의 들러볼 곳(담양 죽녹원 대나무축제), 경로에서 몇 분인지는 시연 경로 값
   events: {
     juknok: { what: '대나무축제', away: '3분', text: '지금 담양은 대나무축제 기간이에요. 죽녹원은 가는 길에서 3분이면 들를 수 있어요. 들러 갈까요?' }

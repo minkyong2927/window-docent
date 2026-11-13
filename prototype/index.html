@@ -688,10 +688,12 @@ function guardLocal(draft, facts){
 function guard(draft, facts){ return callEngine('narrate', { draft, facts }) || guardLocal(draft, facts); }
 let factStep = 0;
 function factDemo(){
-  const f = DEMO.factDemo, draft = f.drafts[factStep++ % f.drafts.length], g = guard(draft, f.facts);
+  // 미리 써 둔 문장: 시연 초안 둘(틀린 연도 · 맞는 연도) 다음에 말투 · 길이 · 언어가 다른 셋 (sample-data/stories.js styles)
+  const f = DEMO.factDemo, all = f.drafts.map(t => ({ who:'초안', text:t, lang:'ko' })).concat((STORIES.styles || []).map(s => ({ who:s.who, text:s.text, lang:s.lang || 'ko' })));
+  const d = all[factStep++ % all.length], g = guard(d.text, f.facts);
   place('⛰', '계룡산', '사실 필드 · ' + f.facts[0]);
-  kid(draft, 'LLM 초안', false);
-  doc(g.text);
+  kid(d.text, '미리 써 둔 문장 · ' + d.who, false);
+  doc(g.text, false, null, d.lang);
   cap(g.ok ? '사실 검증 통과 · 초안의 숫자가 모두 사실 필드에 있어 그대로 말합니다'
            : '사실 검증 차단 · 사실 필드에 없는 숫자(' + g.unknown.join(', ') + ')가 초안에 있어 사실 원문으로 바꿔 말합니다');
 }
