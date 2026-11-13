@@ -15,6 +15,8 @@ data class Poi(
     val location: LatLng,
     /** 해설 우선순위. 클수록 먼저. */
     val priority: Int = 0,
+    /** 산처럼 멀리서도 보이는 명소는 경로에서 이 거리(m)까지 해설 대상. null 이면 설정값 corridorM. */
+    val visibleM: Double? = null,
 )
 
 /** 경로 위에서 해설할 명소 하나 */
@@ -36,9 +38,9 @@ data class PlannedStop(
 class RoutePoiPlanner(private val config: DocentConfig = DocentConfig()) {
 
     /**
-     * @param route 내비 경로 좌표 (NaviHelper)
+     * @param route 경로 좌표열 (1차: 프로토타입 시연 경로 · 2차: NaviHelper 경로점과 현재 위치로 구성)
      * @param pois 후보 명소
-     * @param avgSpeedKmh 평균 속도 추정 (도착 예정 시간 / 남은 거리)
+     * @param avgSpeedKmh 평균 속도 추정 (남은 거리 / 남은 시간 · NaviHelper onDrivingInfo)
      */
     fun plan(route: List<LatLng>, pois: List<Poi>, avgSpeedKmh: Double): List<PlannedStop> {
         require(route.size >= 2) { "경로 좌표는 2개 이상" }
@@ -47,7 +49,7 @@ class RoutePoiPlanner(private val config: DocentConfig = DocentConfig()) {
 
         val near = pois.mapNotNull { poi ->
             val (along, offset) = project(route, cumulative, poi.location)
-            if (offset <= config.corridorM) Triple(poi, along, offset) else null
+            if (offset <= (poi.visibleM ?: config.corridorM)) Triple(poi, along, offset) else null
         }.sortedBy { it.second }
 
         // 너무 가까이 붙은 명소는 우선순위 높은 쪽만 남김 (최소 해설 길이만큼 간격)

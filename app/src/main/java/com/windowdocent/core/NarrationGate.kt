@@ -22,19 +22,29 @@ data class GateResult(val mode: NarrationMode, val reason: GateReason)
 
 /**
  * 언제 말할지는 차량 신호가 정함. 위에서부터 먼저 맞는 규칙이 우선.
+ * 못 받은 신호(null)는 그 규칙을 건너뛰고, 속도를 모르면 달리는 중으로 봄.
  */
 class NarrationGate(private val config: DocentConfig = DocentConfig()) {
 
-    fun evaluate(s: VehicleSignals): GateResult = when {
-        s.doorOpen -> GateResult(NarrationMode.TRIP_RECORD, GateReason.DOOR_OPEN)
-        s.turnSignal != TurnSignal.OFF -> GateResult(NarrationMode.HOLD, GateReason.TURN_SIGNAL)
-        abs(s.steeringAngleDeg) >= config.largeSteeringDeg ->
-            GateResult(NarrationMode.HOLD, GateReason.LARGE_STEERING)
-        s.navGuidance == NavGuidance.VOICE -> GateResult(NarrationMode.HOLD, GateReason.NAV_VOICE)
-        s.navGuidance == NavGuidance.TURN_AHEAD &&
-            (s.navDistanceM ?: 0.0) <= config.navNearDistanceM ->
-            GateResult(NarrationMode.ONE_LINE, GateReason.NAV_NEAR)
-        s.speedKmh < config.stoppedSpeedKmh -> GateResult(NarrationMode.LONG_STORY, GateReason.STOPPED)
-        else -> GateResult(NarrationMode.NARRATE, GateReason.CRUISING)
+    fun evaluate(s: VehicleSignals): GateResult {
+        val steering = s.steeringAngleDeg
+        return when {
+            s.doorOpen -> GateResult(NarrationMode.TRIP_RECORD, GateReason.DOOR_OPEN)
+            s.turnSignal != TurnSignal.OFF -> GateResult(NarrationMode.HOLD, GateReason.TURN_SIGNAL)
+            steering != null && abs(steering) >= config.largeSteeringDeg ->
+                GateResult(NarrationMode.HOLD, GateReason.LARGE_STEERING)
+            s.navGuidance == NavGuidance.VOICE -> GateResult(NarrationMode.HOLD, GateReason.NAV_VOICE)
+            s.navGuidance == NavGuidance.TURN_AHEAD &&
+                (s.navDistanceM ?: 0.0) <= config.navNearDistanceM ->
+                GateResult(NarrationMode.ONE_LINE, GateReason.NAV_NEAR)
+            isStopped(s) -> GateResult(NarrationMode.LONG_STORY, GateReason.STOPPED)
+            else -> GateResult(NarrationMode.NARRATE, GateReason.CRUISING)
+        }
+    }
+
+    /** 정차: 속도가 거의 0 이거나, 브레이크를 밟은 채 기어가는 속도. 긴 이야기는 정차가 확인될 때만. */
+    private fun isStopped(s: VehicleSignals): Boolean {
+        val speed = s.speedKmh ?: return false
+        return speed < config.stoppedSpeedKmh || (s.brakePressed && speed < config.creepSpeedKmh)
     }
 }

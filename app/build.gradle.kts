@@ -11,8 +11,8 @@ android {
         applicationId = "com.windowdocent"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     // CI에서 만든 서명키를 환경변수로 받음. 없으면(로컬) debug 키로 서명.
@@ -50,4 +50,6 @@ android {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // 단위 테스트에서 화면 브리지(JSON)를 실제로 돌리기 위한 org.json 구현 (기기에서는 안드로이드에 들어 있는 것을 씀)
+    testImplementation("org.json:json:20240303")
 }

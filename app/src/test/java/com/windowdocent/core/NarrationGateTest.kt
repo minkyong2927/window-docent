@@ -40,4 +40,23 @@ class NarrationGateTest {
         assertEquals(3, NarrationMode.HOLD.level)
         assertEquals(0, NarrationMode.TRIP_RECORD.level)
     }
+
+    // 브레이크: 위치로 계산한 속도가 흔들릴 때 정차 판단을 보조
+    @Test fun brakeHeldWhileCreepingCountsAsStopped() =
+        check(VehicleSignals(speedKmh = 3.0, brakePressed = true), NarrationMode.LONG_STORY, GateReason.STOPPED)
+
+    @Test fun creepingWithoutBrakeStillNarrates() =
+        check(VehicleSignals(speedKmh = 3.0), NarrationMode.NARRATE, GateReason.CRUISING)
+
+    @Test fun brakeAtHighwaySpeedKeepsNarrating() =
+        check(highway.copy(brakePressed = true), NarrationMode.NARRATE, GateReason.CRUISING)
+
+    // 못 받은 신호(null): 속도를 모르면 달리는 중으로 보고 긴 이야기를 하지 않음
+    @Test fun unknownSpeedIsTreatedAsMoving() {
+        check(VehicleSignals(), NarrationMode.NARRATE, GateReason.CRUISING)
+        check(VehicleSignals(brakePressed = true), NarrationMode.NARRATE, GateReason.CRUISING)
+    }
+
+    @Test fun turnAheadWithoutDistanceIsOneLine() =
+        check(highway.copy(navGuidance = NavGuidance.TURN_AHEAD), NarrationMode.ONE_LINE, GateReason.NAV_NEAR)
 }

@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>창밖 도슨트 프로토타입</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
+  /* 글꼴은 파일로 같이 둠 (차 안 · 앱에서는 인터넷이 없을 수 있음) · Pretendard 1.3.9 · SIL OFL 1.1 (fonts/OFL.txt) */
+  @font-face{font-family:Pretendard;font-weight:45 920;font-style:normal;font-display:swap;
+    src:local("Pretendard Variable"),url("fonts/PretendardVariable.woff2") format("woff2")}
   :root{
     --bg:#0b0d10; --panel:#14171c; --panel2:#1b1f26; --line:#2a2f38;
     --text:#eef1f5; --sub:#9aa3af; --dim:#5d6672;
@@ -13,7 +15,9 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{background:#000;color:var(--text);font-family:Pretendard,"Malgun Gothic",sans-serif}
-  body{width:1920px;height:1080px;overflow:hidden;display:flex;flex-direction:column}
+  html{width:100%;height:100%;overflow:hidden}
+  /* 1920×1080 으로 그리고, 화면이 다르면 fit() 이 통째로 줄이거나 늘려 맞춤 */
+  body{width:1920px;height:1080px;overflow:hidden;display:flex;flex-direction:column;transform-origin:0 0}
 
   .screen{width:1920px;height:720px;background:var(--bg);display:flex;flex-direction:column}
   .statusbar{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;color:var(--sub);font-size:20px}
@@ -45,6 +49,7 @@
   .brand i{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#2fbf9b,#3d8bff);display:inline-block}
   .mode{font-size:19px;padding:8px 14px;border-radius:999px;background:var(--panel2);color:var(--sub);transition:.3s}
   .mode.family{background:rgba(47,191,155,.16);color:var(--accent);font-weight:700}
+  .mode.guest{background:rgba(61,139,255,.16);color:var(--blue);font-weight:700}
 
   .loadrow{margin-top:20px;display:flex;align-items:center;gap:20px}
   .gauge{display:flex;gap:8px}
@@ -99,6 +104,7 @@
   .stop.done .dot{border-color:var(--accent)}
   .stop.done .n{color:var(--dim);text-decoration:line-through}
   .stop.add .n{color:var(--accent)}
+  .planinfo{margin-top:8px;font-size:14px;color:var(--dim);line-height:1.4}
 
   .pause{position:absolute;inset:0;z-index:5;background:rgba(11,13,16,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:0;pointer-events:none;transition:opacity .25s}
   .pause.on{opacity:1}
@@ -122,19 +128,21 @@
 
   /* 시연용 신호 패널 */
   .rig{flex:1;background:#101215;padding:18px 32px;display:flex;flex-direction:column;gap:14px}
-  .righead{display:flex;justify-content:space-between;align-items:center;font-size:18px;color:var(--sub)}
+  .righead{display:flex;justify-content:space-between;align-items:center;gap:16px;font-size:18px;color:var(--sub)}
   .righead b{color:var(--text)}
+  .eng{flex:none;margin-left:auto;padding:4px 12px;border-radius:999px;border:1px solid var(--line);font-size:15px;font-weight:400;color:var(--sub)}
+  .eng.kotlin{border-color:var(--accent);color:var(--accent)}
   .signals{display:flex;gap:12px}
-  .sig{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;cursor:default;transition:.2s}
-  .sig .k{font-size:18px;color:var(--sub)}
-  .sig .v{font-size:32px;font-weight:700;margin-top:8px}
+  .sig{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 16px;cursor:default;transition:.2s}
+  .sig .k{font-size:18px;color:var(--sub);white-space:nowrap}
+  .sig .v{font-size:30px;font-weight:700;margin-top:8px;white-space:nowrap}
   .sig.act{border-color:var(--warn);background:rgba(242,178,51,.1)}
   .sig.act .v{color:var(--warn)}
   .sig.blink .v{animation:pulse .6s infinite}
   .caption{margin-top:auto;background:#000;border-radius:14px;padding:16px 24px;font-size:28px;font-weight:600;min-height:72px;display:flex;align-items:center;gap:14px}
   .caption .tag{font-size:16px;color:#000;background:var(--warn);border-radius:6px;padding:3px 8px;font-weight:700}
-  .controls{display:flex;gap:10px}
-  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:16px;cursor:pointer;font-family:inherit}
+  .controls{display:flex;gap:8px;flex:none}
+  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 11px;font-size:16px;cursor:pointer;font-family:inherit;white-space:nowrap}
   body.auto .controls{display:none}
 </style>
 </head>
@@ -189,13 +197,9 @@
       <div class="col right">
         <div class="rtitle">오늘 경로의 이야기</div>
         <div class="score"><span class="l">가족 퀴즈</span><span class="n" id="score">0 / 0</span></div>
-        <div class="stops" id="stops">
-          <div class="stop" data-k="cheonan"><div class="dot"></div><div><div class="n">천안삼거리</div><div class="s">능수버들 민요</div></div></div>
-          <div class="stop" data-k="gyeryong"><div class="dot"></div><div><div class="n">계룡산</div><div class="s">이름 속 동물 두 마리</div></div></div>
-          <div class="stop" data-k="naejang"><div class="dot"></div><div><div class="n">내장산</div><div class="s">단풍 명소</div></div></div>
-          <div class="stop" data-k="juknok" id="stop-juknok" style="display:none"><div class="dot"></div><div><div class="n">죽녹원 (경유지)</div><div class="s">대나무축제 기간</div></div></div>
-          <div class="stop" data-k="meta"><div class="dot"></div><div><div class="n">메타세쿼이아길</div><div class="s">도착지</div></div></div>
-        </div>
+        <!-- 목록은 경로와 후보 명소로 계산해 그림: 앱에서는 Kotlin RoutePoiPlanner, 브라우저에서는 같은 결과를 미리 계산해 둔 값 -->
+        <div class="stops" id="stops"></div>
+        <div class="planinfo" id="planinfo"></div>
       </div>
 
       <div class="suggest" id="suggest">
@@ -233,49 +237,132 @@
     <div class="controls">
       <button class="btn" data-a="turn">방향지시등</button>
       <button class="btn" data-a="nav">내비 음성</button>
-      <button class="btn" data-a="stop">정차</button>
+      <button class="btn" data-a="brake">브레이크</button>
+      <button class="btn" data-a="speed">속도</button>
       <button class="btn" data-a="rear">뒷좌석</button>
+      <button class="btn" data-a="lang">승객 언어</button>
       <button class="btn" data-a="door">도어</button>
+      <button class="btn" data-a="fact">사실 검증</button>
       <button class="btn" data-a="auto">자동 시연</button>
     </div>
   </div>
   <div class="signals">
     <div class="sig" id="s-turn"><div class="k">방향지시등</div><div class="v">꺼짐</div></div>
     <div class="sig" id="s-steer"><div class="k">조향각</div><div class="v">0°</div></div>
+    <div class="sig" id="s-brake"><div class="k">브레이크</div><div class="v">뗌</div></div>
     <div class="sig" id="s-speed"><div class="k">속도 (위치 기반)</div><div class="v">98km/h</div></div>
     <div class="sig" id="s-nav"><div class="k">내비 안내</div><div class="v">없음</div></div>
     <div class="sig" id="s-seat"><div class="k">좌석 착석</div><div class="v">운전석</div></div>
     <div class="sig" id="s-door"><div class="k">도어</div><div class="v">닫힘</div></div>
   </div>
-  <div class="caption"><span class="tag">장면</span><span id="captext">토요일 아침, 가족이 담양으로 출발합니다</span></div>
+  <div class="caption"><span class="tag">장면</span><span id="captext">토요일 아침, 가족이 담양으로 출발합니다</span><span class="eng" id="engine"></span></div>
 </section>
+
+<!-- 시연 데이터: 서울 → 담양 경로와 후보 명소. 좌표는 근삿값이고, 실서비스는 NaviHelper 경로점과 한국관광공사 TourAPI 를 씀.
+     plan 은 같은 입력으로 Kotlin RoutePoiPlanner 가 낸 결과를 적어 둔 것(브라우저용). 값이 어긋나면 단위 테스트 DocentBridgeTest 가 실패함. -->
+<script id="demo-data" type="application/json">
+{
+  "avgSpeedKmh": 90,
+  "route": [
+    [37.4640, 127.0430], [37.2890, 127.1040], [37.0000, 127.1400], [36.8300, 127.1560], [36.7450, 127.1800],
+    [36.6100, 127.1300], [36.4000, 127.1000], [36.3100, 127.0700], [36.1300, 127.1000], [36.0500, 127.0700],
+    [35.8700, 127.0700], [35.6600, 126.9500], [35.5900, 126.8700], [35.5300, 126.8400], [35.4200, 126.8100],
+    [35.3300, 126.8000], [35.2650, 126.9050], [35.3050, 126.9750], [35.3216, 127.0057]
+  ],
+  "routeVia": [
+    [37.4640, 127.0430], [37.2890, 127.1040], [37.0000, 127.1400], [36.8300, 127.1560], [36.7450, 127.1800],
+    [36.6100, 127.1300], [36.4000, 127.1000], [36.3100, 127.0700], [36.1300, 127.1000], [36.0500, 127.0700],
+    [35.8700, 127.0700], [35.6600, 126.9500], [35.5900, 126.8700], [35.5300, 126.8400], [35.4200, 126.8100],
+    [35.3300, 126.8000], [35.2650, 126.9050], [35.3050, 126.9750], [35.3270, 126.9860], [35.3216, 127.0057]
+  ],
+  "pois": [
+    {"id": "cheonan", "name": "천안삼거리", "sub": "능수버들 민요", "lat": 36.7838, "lng": 127.1664, "priority": 2},
+    {"id": "gyeryong", "name": "계룡산", "sub": "이름 속 동물 두 마리", "lat": 36.3425, "lng": 127.2058, "priority": 3, "visibleM": 15000},
+    {"id": "hanok", "name": "전주 한옥마을", "sub": "경로 폭 밖이라 빠짐", "lat": 35.8150, "lng": 127.1530, "priority": 4},
+    {"id": "naejang", "name": "내장산", "sub": "단풍 명소", "lat": 35.4914, "lng": 126.8890, "priority": 3, "visibleM": 8000},
+    {"id": "juknok", "name": "죽녹원", "sub": "대나무축제 기간", "lat": 35.3270, "lng": 126.9860, "priority": 4, "viaOnly": true},
+    {"id": "provence", "name": "메타프로방스", "sub": "도착지와 붙어 있어 우선순위로 빠짐", "lat": 35.3228, "lng": 127.0085, "priority": 1},
+    {"id": "meta", "name": "메타세쿼이아길", "sub": "도착지", "lat": 35.3216, "lng": 127.0057, "priority": 5}
+  ],
+  "plan": {
+    "base": [{"id": "cheonan", "sec": 60}, {"id": "gyeryong", "sec": 60}, {"id": "naejang", "sec": 60}, {"id": "meta", "sec": 15}],
+    "via": [{"id": "cheonan", "sec": 60}, {"id": "gyeryong", "sec": 60}, {"id": "naejang", "sec": 60}, {"id": "juknok", "sec": 60}, {"id": "meta", "sec": 15}]
+  },
+  "factDemo": {
+    "facts": ["계룡산은 1968년에 국립공원으로 지정됐다."],
+    "drafts": ["계룡산은 1392년에 국립공원이 됐어요.", "계룡산은 1968년에 국립공원이 된 산이에요."]
+  }
+}
+</script>
 
 <script>
 const $ = id => document.getElementById(id);
-const S = { turn:'off', steer:0, speed:98, nav:null, rear:false, door:false };
+const DEMO = JSON.parse($('demo-data').textContent);
 
-function computeLoad(){
-  if (S.door) return {l:0, why:'<b>도착 · 도어 열림</b> → 여행 기록을 보여줍니다'};
-  if (S.turn !== 'off') return {l:3, why:'<b>방향지시등 켜짐</b> → 해설을 멈춥니다'};
-  if (Math.abs(S.steer) >= 30) return {l:3, why:'<b>큰 조향</b> → 회전이 끝날 때까지 멈춤'};
-  if (S.nav === 'voice') return {l:3, why:'<b>내비 안내 음성</b> → 내비가 먼저 말합니다'};
-  if (S.nav === 'near') return {l:2, why:'<b>분기점 접근</b> → 한 문장으로 짧게'};
-  if (S.speed === 0) return {l:0, why:'<b>정차 중</b> → 긴 이야기 가능'};
-  return {l:1, why:'<b>직진 · 안내 없음</b> → 해설과 퀴즈'};
+// 앱(WebView)에서는 window.Docent 가 Kotlin 엔진(DocentBridge)이다.
+// 브라우저에는 없으므로 아래 JS 가 같은 규칙으로 대신한다 (decideLocal · guardLocal · DEMO.plan).
+const BRIDGE = window.Docent || null;
+function callEngine(method, payload){
+  if (!BRIDGE) return null;
+  try { return JSON.parse(BRIDGE[method](JSON.stringify(payload))); }
+  catch (e) { console.warn('Docent.' + method, e); return null; }
 }
+
+// 시연용 신호 판 상태. null 은 '못 받은 값'.
+const S = { turn:'off', steer:0, speed:98, brake:false, nav:null, navDist:null, rear:false, front:false, door:false, lang:'ko' };
+const LANG = { en:'English', es:'Español' };
+
+// 판단 근거(엔진의 GateReason) → 화면 문구. l 은 브라우저용 운전 부담 단계.
+const REASON = {
+  DOOR_OPEN:      { l:0, why:'<b>도착 · 도어 열림</b> → 여행 기록을 보여줍니다' },
+  TURN_SIGNAL:    { l:3, why:'<b>방향지시등 켜짐</b> → 해설을 멈춥니다', t1:'운전에 집중할 시간이에요', t2:'차선 변경이 끝나면 이야기를 이어갈게요' },
+  LARGE_STEERING: { l:3, why:'<b>큰 조향</b> → 회전이 끝날 때까지 멈춤', t1:'운전에 집중할 시간이에요', t2:'회전이 끝나면 이야기를 이어갈게요' },
+  NAV_VOICE:      { l:3, why:'<b>내비 안내 음성</b> → 내비가 먼저 말합니다', t1:'길 안내가 먼저예요', t2:'내비 안내가 끝나면 이야기를 이어갈게요' },
+  NAV_NEAR:       { l:2, why:'<b>분기점 접근</b> → 한 문장으로 짧게' },
+  STOPPED:        { l:0, why:'<b>정차 중</b> → 긴 이야기 가능' },
+  CRUISING:       { l:1, why:'<b>직진 · 안내 없음</b> → 해설과 퀴즈' }
+};
+
+// 브라우저용: Kotlin NarrationGate · AudienceSelector 와 같은 규칙 (위에서부터 먼저 맞는 것)
+function isStopped(){
+  return S.speed !== null && (S.speed < 1 || (S.brake && S.speed < 5));
+}
+function decideLocal(){
+  const reason = S.door ? 'DOOR_OPEN'
+    : S.turn !== 'off' ? 'TURN_SIGNAL'
+    : (S.steer !== null && Math.abs(S.steer) >= 30) ? 'LARGE_STEERING'
+    : S.nav === 'voice' ? 'NAV_VOICE'
+    : (S.nav === 'near' && (S.navDist === null ? 0 : S.navDist) <= 1000) ? 'NAV_NEAR'
+    : isStopped() ? 'STOPPED' : 'CRUISING';
+  const foreign = !!S.lang && S.lang !== 'ko';
+  return { reason, level: REASON[reason].l, audience: foreign ? 'FOREIGN_GUEST' : S.rear ? 'FAMILY' : 'DRIVER', language: foreign ? S.lang : 'ko' };
+}
+// 지금 어떻게 · 누구에게 말할지: 앱에서는 Kotlin 엔진, 브라우저에서는 위 규칙
+function decide(){
+  const r = callEngine('evaluate', S);
+  if (r && REASON[r.reason]) return { reason:r.reason, level:r.level, audience:r.audience, language:r.language, engine:'kotlin' };
+  return Object.assign(decideLocal(), { engine:'js' });
+}
+
 function render(){
-  const {l, why} = computeLoad();
-  document.querySelectorAll('.seg').forEach(s => s.classList.toggle('on', +s.dataset.l === l));
-  $('reason').innerHTML = why;
-  $('pause').classList.toggle('on', l === 3);
-  $('pauseT1').textContent = S.nav === 'voice' ? '길 안내가 먼저예요' : '운전에 집중할 시간이에요';
-  $('pauseWhy').textContent = S.nav === 'voice' ? '내비 안내가 끝나면 이야기를 이어갈게요' : '차선 변경이 끝나면 이야기를 이어갈게요';
+  const d = decide(), R = REASON[d.reason];
+  document.querySelectorAll('.seg').forEach(s => s.classList.toggle('on', +s.dataset.l === d.level));
+  $('reason').innerHTML = R.why;
+  $('pause').classList.toggle('on', d.level === 3);
+  if (R.t1) { $('pauseT1').textContent = R.t1; $('pauseWhy').textContent = R.t2; }
   $('record').classList.toggle('on', S.door);
-  $('mode').textContent = S.rear ? '가족 모드 · 뒷좌석 1명' : '운전자 모드';
-  $('mode').classList.toggle('family', S.rear);
+  const mode = $('mode');
+  mode.textContent = d.audience === 'FOREIGN_GUEST' ? '외국어 승객 모드 · ' + (LANG[d.language] || d.language)
+    : d.audience === 'FAMILY' ? '가족 모드 · 뒷좌석 1명' : '운전자 모드';
+  mode.classList.toggle('family', d.audience === 'FAMILY');
+  mode.classList.toggle('guest', d.audience === 'FOREIGN_GUEST');
+  const eng = $('engine');
+  eng.textContent = d.engine === 'kotlin' ? '판단 · Kotlin 엔진' : '판단 · 브라우저 시연';
+  eng.classList.toggle('kotlin', d.engine === 'kotlin');
   sig('s-turn', S.turn === 'off' ? '꺼짐' : (S.turn === 'left' ? '◀ 좌측' : '우측 ▶'), S.turn !== 'off', S.turn !== 'off');
-  sig('s-steer', S.steer + '°', Math.abs(S.steer) >= 30);
-  sig('s-speed', S.speed + 'km/h', S.speed === 0);
+  sig('s-steer', S.steer === null ? '–' : S.steer + '°', S.steer !== null && Math.abs(S.steer) >= 30);
+  sig('s-brake', S.brake ? '밟음' : '뗌', S.brake);
+  sig('s-speed', S.speed === null ? '–' : S.speed + 'km/h', isStopped());
   sig('s-nav', S.nav === 'voice' ? '음성 출력 중' : S.nav === 'near' ? '분기점 1km' : '없음', !!S.nav);
   sig('s-seat', S.rear ? '운전석 + 뒷좌석' : '운전석', S.rear);
   sig('s-door', S.door ? '열림' : '닫힘', S.door);
@@ -283,6 +370,48 @@ function render(){
   $('navvoice').classList.toggle('on', S.nav === 'voice');
 }
 function sig(id, v, act, blink){ const el = $(id); el.querySelector('.v').textContent = v; el.classList.toggle('act', !!act); el.classList.toggle('blink', !!blink); }
+
+// 오늘 경로의 이야기: 경로에서 지나갈 명소 · 순서 · 해설 길이. 앱에서는 Kotlin RoutePoiPlanner 가 계산한다.
+let VIA = false;              // "가자"로 죽녹원을 경유지에 넣었는지
+const STOPSTATE = {};         // 명소별 표시 상태 (now · done)
+function planStops(){
+  const pois = DEMO.pois.filter(p => VIA || !p.viaOnly);
+  const planned = callEngine('plan', {
+    route: VIA ? DEMO.routeVia : DEMO.route,
+    pois: pois.map(p => ({ id:p.id, name:p.name, lat:p.lat, lng:p.lng, priority:p.priority, visibleM:p.visibleM })),
+    avgSpeedKmh: DEMO.avgSpeedKmh
+  });
+  return { list: planned && planned.length ? planned : DEMO.plan[VIA ? 'via' : 'base'], candidates: pois.length };
+}
+function renderStops(){
+  const plan = planStops(), byId = {};
+  DEMO.pois.forEach(p => { byId[p.id] = p; });
+  $('stops').innerHTML = plan.list.filter(s => byId[s.id]).map(s => {
+    const p = byId[s.id], state = STOPSTATE[s.id];
+    return '<div class="stop' + (p.viaOnly ? ' add' : '') + (state ? ' ' + state : '') + '" data-k="' + p.id + '"><div class="dot"></div><div>'
+      + '<div class="n">' + p.name + (p.viaOnly ? ' (경유지)' : '') + '</div><div class="s">' + p.sub + ' · 해설 ' + s.sec + '초</div></div></div>';
+  }).join('');
+  $('planinfo').textContent = '후보 ' + plan.candidates + '곳 중 ' + plan.list.length + '곳 · 경로 폭과 간격으로 선정';
+}
+
+// 사실 검증: LLM 초안에 사실 필드에 없는 숫자가 있으면 사실 원문으로 바꿈. 앱에서는 Kotlin FactGuard.
+function guardLocal(draft, facts){
+  const numbers = t => (t.match(/\d[\d,]*(?:\.\d+)?/g) || []).map(n => n.replace(/,/g, ''));
+  const known = {};
+  facts.forEach(f => numbers(f).forEach(n => { known[n] = true; }));
+  const unknown = numbers(draft).filter((n, i, all) => !known[n] && all.indexOf(n) === i);
+  return { text: unknown.length ? (facts[0] || '') : draft, ok: !unknown.length, unknown };
+}
+function guard(draft, facts){ return callEngine('narrate', { draft, facts }) || guardLocal(draft, facts); }
+let factStep = 0;
+function factDemo(){
+  const f = DEMO.factDemo, draft = f.drafts[factStep++ % f.drafts.length], g = guard(draft, f.facts);
+  place('⛰', '계룡산', '사실 필드 · ' + f.facts[0]);
+  kid(draft, 'LLM 초안', false);
+  doc(g.text);
+  cap(g.ok ? '사실 검증 통과 · 초안의 숫자가 모두 사실 필드에 있어 그대로 말합니다'
+           : '사실 검증 차단 · 사실 필드에 없는 숫자(' + g.unknown.join(', ') + ')가 초안에 있어 사실 원문으로 바꿔 말합니다');
+}
 
 let typing = null;
 function doc(text, quiz=false){
@@ -301,7 +430,12 @@ function kid(text, who='뒷좌석 · 아이', live=true){ $('kb').classList.remo
 function hideKid(){ $('kb').classList.add('hidden'); }
 function hideDoc(){ $('db').classList.add('hidden'); clearInterval(typing); }
 function place(icon, n, s){ $('place').classList.add('on'); $('place').querySelector('.pin').textContent = icon; $('pname').textContent = n; $('psub').textContent = s; }
-function stop(k, state){ const el = document.querySelector(`.stop[data-k="${k}"]`); el.classList.remove('now','done'); if (state) el.classList.add(state); }
+function stop(k, state){
+  STOPSTATE[k] = state || '';
+  const el = document.querySelector(`.stop[data-k="${k}"]`);
+  if (!el) return;
+  el.classList.remove('now','done'); if (state) el.classList.add(state);
+}
 function cap(t){ $('captext').textContent = t; }
 function nav(d, n, a){ $('navdist').textContent = d; $('navname').textContent = n; $('navarrow').textContent = a; }
 function eta(m, at, km){ $('etamin').textContent = m; $('etaat').textContent = at; $('etakm').textContent = km; }
@@ -310,8 +444,10 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
 async function scenario(){
   document.body.classList.add('auto');
-  Object.assign(S, { turn:'off', steer:0, speed:98, nav:null, rear:false, door:false });
-  hideDoc(); hideKid(); render();
+  Object.assign(S, { turn:'off', steer:0, speed:98, brake:false, nav:null, navDist:null, rear:false, front:false, door:false, lang:'ko' });
+  VIA = false; Object.keys(STOPSTATE).forEach(k => { delete STOPSTATE[k]; });
+  $('score').textContent = '0 / 0'; $('wp').innerHTML = ''; $('suggest').classList.remove('on');
+  hideDoc(); hideKid(); renderStops(); render();
 
   cap('토요일 아침, 가족이 서울에서 담양으로 출발합니다');
   await wait(2500);
@@ -335,12 +471,12 @@ async function scenario(){
   await wait(3500); hideKid();
 
   cap('분기점에서 내비 안내가 나오면 해설을 멈추고 길 안내가 먼저 나옵니다');
-  S.nav = 'near'; nav('1km', '호남고속도로 방면', '↗'); render();
+  S.nav = 'near'; S.navDist = 1000; nav('1km', '호남고속도로 방면', '↗'); render();
   doc('계룡산 근처에는 옛날 이야기가 아주 많은데요, 그중 하나가');
   await wait(2600);
   S.nav = 'voice'; render();
   await wait(2400);
-  S.nav = null; S.turn = 'right'; S.steer = 18; render(); car(330, 400, 25);
+  S.nav = null; S.navDist = null; S.turn = 'right'; S.steer = 18; render(); car(330, 400, 25);
   await wait(2200);
   S.turn = 'off'; S.steer = 0; render(); nav('42km', '호남고속도로 직진', '↑'); car(360, 360, 40);
   await wait(1200);
@@ -358,8 +494,7 @@ async function scenario(){
   kid('가자!', '운전석 · 아빠');
   await wait(1400);
   $('suggest').classList.remove('on');
-  document.getElementById('stop-juknok').style.display = ''; stop('juknok', 'now');
-  document.querySelector('[data-k="juknok"]').classList.add('add');
+  VIA = true; renderStops(); stop('juknok', 'now');   // 경유지가 든 경로로 명소 목록을 다시 계산
   $('wp').innerHTML = '<span class="waypt">경유 죽녹원 · </span>';
   eta('28분', '11:33', '25km');
   doc('죽녹원을 경유지로 넣었어요. 도착하면 대나무 숲길 지도를 보여 줄게요.');
@@ -373,19 +508,35 @@ async function scenario(){
   cap('창밖 도슨트 — 길을 미리 읽고, 운전 상황에 맞춰 먼저 말하는 차량용 도슨트');
   await wait(3500);
   window.__done = true;
+  document.body.classList.remove('auto');   // 시연이 끝나면 신호 단추를 다시 보여 줌
 }
 
 document.querySelectorAll('.btn').forEach(b => b.onclick = () => {
   const a = b.dataset.a;
   if (a === 'turn') S.turn = S.turn === 'off' ? 'right' : 'off';
-  if (a === 'nav') S.nav = S.nav === null ? 'near' : S.nav === 'near' ? 'voice' : null;
-  if (a === 'stop') S.speed = S.speed === 0 ? 98 : 0;
+  if (a === 'nav') { S.nav = S.nav === null ? 'near' : S.nav === 'near' ? 'voice' : null; S.navDist = S.nav ? 1000 : null; }
+  if (a === 'brake') S.brake = !S.brake;
+  if (a === 'speed') S.speed = S.speed >= 98 ? 3 : S.speed > 0 ? 0 : 98;   // 주행 → 서행 → 정차
   if (a === 'rear') S.rear = !S.rear;
+  if (a === 'lang') S.lang = S.lang === 'ko' ? 'en' : S.lang === 'en' ? 'es' : 'ko';
   if (a === 'door') S.door = !S.door;
+  if (a === 'fact') return factDemo();
   if (a === 'auto') return scenario();
   render();
 });
-render();
+
+// 화면이 1920×1080 과 다르면 전체가 보이게 통째로 맞춤 (앱 WebView · 작은 창 · 큰 화면)
+function fit(){
+  const w = window.innerWidth, h = window.innerHeight;
+  if (!w || !h) return;
+  const k = Math.min(w / 1920, h / 1080);
+  const dx = Math.max(0, (w - 1920 * k) / 2), dy = Math.max(0, (h - 1080 * k) / 2);
+  document.body.style.transform = (Math.abs(k - 1) < 0.001 && dx < 1 && dy < 1) ? '' : 'translate(' + dx + 'px,' + dy + 'px) scale(' + k + ')';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('load', fit);
+
+fit(); renderStops(); render();
 if (new URLSearchParams(location.search).has('auto')) scenario();
 </script>
 </body>

@@ -47,6 +47,19 @@ class RoutePoiPlannerTest {
         assertEquals(15, stops[0].narrationSec)
     }
 
+    @Test fun landmarkVisibleFromAfarIsKeptBeyondCorridor() {
+        // 경로에서 약 5.6km: 기본 폭 3km 밖이지만, 멀리서 보이는 산은 visibleM 만큼 넓게 봄
+        val mountain = Poi("mountain", "mountain", LatLng(36.05, 127.04), visibleM = 8000.0)
+        val museum = Poi("museum", "museum", LatLng(36.05, 127.06))
+        val stops = planner.plan(route, listOf(mountain, museum), 90.0)
+        assertEquals(listOf("mountain"), stops.map { it.poi.id })
+    }
+
+    @Test fun visibleRangeShorterThanOffsetIsDropped() {
+        val hill = Poi("hill", "hill", LatLng(36.05, 127.04), visibleM = 4000.0)
+        assertEquals(emptyList<String>(), planner.plan(route, listOf(hill), 90.0).map { it.poi.id })
+    }
+
     @Test fun routeNeedsTwoPoints() {
         assertThrows(IllegalArgumentException::class.java) { planner.plan(listOf(route[0]), emptyList(), 90.0) }
     }

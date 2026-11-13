@@ -1,6 +1,7 @@
 package com.windowdocent.core
 
-enum class TurnSignal { OFF, LEFT, RIGHT, HAZARD }
+/** 방향지시등. Pleos Vehicle SDK 의 TurnSignalValue(OFF · LEFT · RIGHT)와 같은 값. */
+enum class TurnSignal { OFF, LEFT, RIGHT }
 
 enum class NavGuidance {
     NONE,
@@ -11,18 +12,28 @@ enum class NavGuidance {
 }
 
 /**
- * 한 시점의 차량 신호. Pleos Connect SDK의 Vehicle·NaviHelper·FusedLocation 값을 채움.
+ * 한 시점의 차량 신호. 못 받은 값은 null (미지원 차종, 터널에서 위치가 끊긴 때 등).
+ *
+ * Pleos Connect SDK 에서 받을 곳 (2차 준비 기간에 연결 · Vehicle 2.3.2, NaviHelper 3.0.5, FusedLocation 1.1.3 기준):
+ * - speedKmh          Vehicle SDK 에 차속 API 가 없어 FusedLocation 위치 변화(LocationData)로 계산
+ * - turnSignal        Vehicle TurnSignal.registerTurnSignalState
+ * - steeringAngleDeg  Vehicle SteeringWheel.registerSteeringWheelAngle
+ * - brakePressed      Vehicle Brake.registerBrakePedalStatus
+ * - navGuidance       NaviHelper onTBTInfo (다음 안내가 있으면 TURN_AHEAD). 안내 음성 출력 중(VOICE)은 SDK 에 없어 오디오 포커스로 판단
+ * - navDistanceM      NaviHelper onTBTInfo 의 TBTInfo.distance
+ * - doorOpen          Vehicle Door.registerDoorPosition
  */
 data class VehicleSignals(
-    val speedKmh: Double = 0.0,
+    val speedKmh: Double? = null,
     val turnSignal: TurnSignal = TurnSignal.OFF,
-    val steeringAngleDeg: Double = 0.0,
+    val steeringAngleDeg: Double? = null,
+    val brakePressed: Boolean = false,
     val navGuidance: NavGuidance = NavGuidance.NONE,
     val navDistanceM: Double? = null,
     val doorOpen: Boolean = false,
 )
 
-/** 좌석 착석 정보 (Vehicle - Seat) */
+/** 좌석 착석 정보 (Vehicle Seat.registerSeatOccupancy · 조수석 ROW_1_RIGHT, 뒷좌석 ROW_2_*) */
 data class Seats(
     val frontPassenger: Boolean = false,
     val rearCount: Int = 0,
@@ -33,6 +44,8 @@ data class DocentConfig(
     val largeSteeringDeg: Double = 30.0,
     val navNearDistanceM: Double = 1000.0,
     val stoppedSpeedKmh: Double = 1.0,
+    /** 브레이크를 밟은 채 이 속도 아래면 정차로 봄 (위치로 계산한 속도의 흔들림 보정) */
+    val creepSpeedKmh: Double = 5.0,
     /** 경로에서 이만큼 안쪽에 있는 명소만 해설 대상 */
     val corridorM: Double = 3000.0,
     /** 해설 1건 최소·최대 길이(초) */
