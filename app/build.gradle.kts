@@ -11,8 +11,8 @@ android {
         applicationId = "com.windowdocent"
         minSdk = 29
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.7.1"
     }
 
     // CI에서 만든 서명키를 환경변수로 받음. 없으면(로컬) debug 키로 서명.

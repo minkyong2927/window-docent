@@ -15,6 +15,7 @@ import com.windowdocent.core.VoiceInput
  * - request() 로 듣기 시작 · ResultListener.onUpdated(글, 끝났는지) 에서 끝난 글을 받음 · stop() 으로 그만
  * - 해설을 말하는 동안 계속 듣지는 않음: 화면의 말하기 단추를 누르거나, 못 한 이야기를 물은 뒤 한 번만 들음
  * - 연결(initialize)에 실패하면 unavailable 을 불러 화면이 흉내 단추로 돌아가게 함
+ * - 매니페스트에 pleos.car.permission.STT_SERVICE 가 있어야 함. 만들다 예외가 나면 MainActivity 가 흉내 단추로만 둠
  * 컴파일은 SDK 로 확인했고, Pleos Connect 에뮬레이터에서의 실행 확인은 2차 준비 기간에 함.
  */
 class PleosVoiceInput(

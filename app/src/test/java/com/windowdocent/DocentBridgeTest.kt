@@ -465,4 +465,59 @@ class DocentBridgeTest {
         assertEquals(2, ears.listens)
         assertEquals("ko:첫 문장이에요.", speaker.said.last())
     }
+
+    // ── 장치가 예외를 던질 때 (11/14 에뮬레이터: 음성 권한이 없어 앱이 바로 꺼진 일) ─────────────
+
+    /** 무엇을 불러도 예외를 던지는 말하는 장치 · 듣는 장치 */
+    private class BrokenSpeaker : Speaker {
+        override fun speak(text: String, language: String, done: () -> Unit, failed: (String) -> Unit) =
+            throw SecurityException("Permission pleos.car.permission.TTS_SERVICE is required to perform this action.")
+        override fun stop() = throw SecurityException("stop")
+        override fun release() = throw SecurityException("release")
+    }
+
+    private class BrokenEars : com.windowdocent.core.VoiceInput {
+        override fun listen(language: String, heard: (String) -> Unit, failed: (String) -> Unit) =
+            throw SecurityException("Permission pleos.car.permission.STT_SERVICE is required to perform this action.")
+        override fun stop() = throw SecurityException("stop")
+        override fun release() = throw SecurityException("release")
+    }
+
+    @Test fun bridgeStaysAliveWhenTheSpeakerThrows() {
+        val bridge = DocentBridge(speaker = BrokenSpeaker(), speakerName = { "시험 장치" })
+        bridge.evaluate(state())
+        val r = JSONObject(bridge.speak("""{"id":"a","text":"첫 문장이에요. 둘째 문장이에요."}"""))
+        assertTrue(r.getBoolean("available"))
+        assertEquals("DONE", r.getString("state"))
+        assertEquals("SecurityException", r.getString("error"))
+        bridge.evaluate(state(nav = "voice"))                    // 멈춤 · 다시 시작도 그대로
+        JSONObject(bridge.voiceStop("{}"))
+        assertTrue(JSONObject(bridge.evaluate(state())).has("mode"))     // 판단도 그대로
+        bridge.close()
+    }
+
+    @Test fun bridgeFallsBackToTheNextSpeakerInTheChain() {
+        val speaker = FakeSpeaker()
+        val chain = com.windowdocent.core.SpeakerChain(
+            listOf(
+                com.windowdocent.core.SpeakerChain.Maker("Pleos TextToSpeech") { throw SecurityException("TTS_SERVICE") },
+                com.windowdocent.core.SpeakerChain.Maker("안드로이드 TTS") { speaker },
+            ),
+        )
+        val bridge = DocentBridge(speaker = chain, speakerName = { chain.name })
+        bridge.evaluate(state())
+        val r = JSONObject(bridge.speak("""{"id":"a","text":"첫 문장이에요."}"""))
+        assertEquals("안드로이드 TTS", r.getString("device"))
+        assertEquals(listOf("ko:첫 문장이에요."), speaker.said)
+    }
+
+    @Test fun bridgeStaysAliveWhenTheVoiceInputThrows() {
+        val bridge = DocentBridge(speaker = FakeSpeaker(), voiceInput = BrokenEars())
+        bridge.evaluate(state())
+        val v = JSONObject(bridge.listen("{}"))
+        assertFalse(v.getBoolean("listening"))
+        assertEquals("NONE", v.getJSONObject("heard").getString("command"))
+        assertEquals("SecurityException", v.getJSONObject("heard").getString("error"))
+        bridge.close()
+    }
 }

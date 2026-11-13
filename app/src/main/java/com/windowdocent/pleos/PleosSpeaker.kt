@@ -16,6 +16,8 @@ import java.util.Locale
  * 멈춤 · 이어 말하기는 Narrator 가 문장 단위로 함.
  * - 기기 안 음성(Mode.ON_DEVICE): 통신이 끊겨도 말하게. 서버 음성(registerApp)은 쓰지 않음
  * - 연결(initialize)이 끝나기 전에 온 문장은 기다렸다 말함. 연결에 실패하면 unavailable 을 불러 다른 장치로 넘김
+ * - 매니페스트에 pleos.car.permission.TTS_SERVICE 가 있어야 함. 없으면 addEventListener 가 SecurityException (11/14 에뮬레이터)
+ *   만들다 예외가 나면 AppSpeaker(SpeakerChain) 가 안드로이드 TTS 로 넘김
  * 컴파일은 SDK 로 확인했고, Pleos Connect 에뮬레이터에서의 실행 확인은 2차 준비 기간에 함.
  */
 class PleosSpeaker(

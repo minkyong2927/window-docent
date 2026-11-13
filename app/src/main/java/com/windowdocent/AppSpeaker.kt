@@ -7,58 +7,38 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import com.windowdocent.core.Speaker
+import com.windowdocent.core.SpeakerChain
 import com.windowdocent.pleos.PleosSpeaker
 
 /**
  * 앱이 쓰는 말하는 장치. Pleos 기기면 Pleos TextToSpeech SDK, 아니면 안드로이드 기본 TTS,
  * 그것도 못 쓰면 소리 없이 글 길이만큼 시간이 흐르는 장치 (화면의 해설 글은 그대로 진행).
+ * 장치를 만들다 · 부르다 예외가 나도 앱은 꺼지지 않고 다음 장치로 넘어감 (SpeakerChain · 11/14 에뮬레이터에서 음성 권한이 없어 앱이 꺼진 일).
  * 어느 장치가 말하는지는 name 으로 화면에 보임.
  */
-class AppSpeaker(context: Context) : Speaker {
-    private val app = context.applicationContext
+class AppSpeaker private constructor(private val chain: SpeakerChain) : Speaker by chain {
+    constructor(context: Context) : this(chainFor(context.applicationContext))
 
-    @Volatile
-    private var delegate: Speaker = choose()
-
-    @Volatile
-    var name: String = nameOf(delegate)
-        private set
-
-    private fun choose(): Speaker = when {
-        PleosSpeaker.available(app) -> PleosSpeaker(app) { why -> fallBack("Pleos TextToSpeech: $why") }
-        else -> AndroidSpeaker(app) { why -> fallBack("안드로이드 TTS: $why") }
-    }
-
-    /** 지금 장치를 못 쓰면 다음 장치로 (Pleos → 안드로이드 TTS → 소리 없음) */
-    private fun fallBack(why: String) {
-        Log.w(TAG, "말하는 장치 바꿈: $why")
-        val before = delegate
-        delegate = when (before) {
-            is PleosSpeaker -> AndroidSpeaker(app) { w -> fallBack("안드로이드 TTS: $w") }
-            else -> SilentSpeaker()
-        }
-        name = nameOf(delegate)
-        try {
-            before.release()
-        } catch (t: Throwable) {
-            Log.w(TAG, "정리 실패", t)
-        }
-    }
-
-    override fun speak(text: String, language: String, done: () -> Unit, failed: (String) -> Unit) =
-        delegate.speak(text, language, done, failed)
-
-    override fun stop() = delegate.stop()
-
-    override fun release() = delegate.release()
+    val name: String get() = chain.name
 
     private companion object {
         const val TAG = "AppSpeaker"
 
-        fun nameOf(s: Speaker) = when (s) {
-            is PleosSpeaker -> "Pleos TextToSpeech"
-            is AndroidSpeaker -> "안드로이드 TTS"
-            else -> "소리 없음"
+        fun chainFor(app: Context): SpeakerChain {
+            val pleos = try {
+                PleosSpeaker.available(app)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Pleos 음성 서비스 확인 실패", t)
+                false
+            }
+            return SpeakerChain(
+                listOfNotNull(
+                    if (pleos) SpeakerChain.Maker("Pleos TextToSpeech") { u -> PleosSpeaker(app, u) } else null,
+                    SpeakerChain.Maker("안드로이드 TTS") { u -> AndroidSpeaker(app, u) },
+                    SpeakerChain.Maker("소리 없음") { SilentSpeaker() },
+                ),
+                log = { msg, t -> Log.w(TAG, msg, t) },
+            )
         }
     }
 }

@@ -113,8 +113,14 @@ class DocentBridge(
                 val src = live ?: factory().also { live = it }
                 liveOn = true
                 runner {
-                    engine.attach(src)
-                    onLiveStart(src)
+                    try {
+                        engine.attach(src)
+                        onLiveStart(src)
+                    } catch (t: Throwable) {
+                        // 신호 공급원을 붙이다 예외가 나면 시연 신호로 돌아감 (앱은 꺼지지 않음)
+                        liveOn = false
+                        engine.attach(source)
+                    }
                 }
             } else if (!on && liveOn) {
                 liveOn = false
@@ -361,18 +367,24 @@ class DocentBridge(
             listening = true
         }
         val language = engine.decide().language
+        val failed: (String) -> Unit = { why ->
+            listening = false
+            heard = JSONObject().put("text", "").put("command", Command.NONE.name).put("error", why)
+        }
         runner {
-            input.listen(
-                language,
-                { text ->
-                    listening = false
-                    handleCommand(text)
-                },
-                { why ->
-                    listening = false
-                    heard = JSONObject().put("text", "").put("command", Command.NONE.name).put("error", why)
-                },
-            )
+            try {
+                input.listen(
+                    language,
+                    { text ->
+                        listening = false
+                        handleCommand(text)
+                    },
+                    failed,
+                )
+            } catch (t: Throwable) {
+                // 듣는 장치가 던져도 앱은 그대로 · 화면에는 못 들은 것으로
+                failed(t.javaClass.simpleName)
+            }
         }
         return true
     }
@@ -400,7 +412,7 @@ class DocentBridge(
         liveOn = false
         engine.detach()
         narrator?.release()
-        voiceInput?.release()
+        runCatching { voiceInput?.release() }
     }
 
     /**

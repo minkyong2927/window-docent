@@ -8,6 +8,7 @@ import android.util.Log
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.windowdocent.core.LiveSignalSource
+import com.windowdocent.core.VoiceInput
 import com.windowdocent.pleos.PleosSignalSource
 import com.windowdocent.pleos.PleosSpeaker
 import com.windowdocent.pleos.PleosVoiceInput
@@ -28,7 +29,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val voice = AppSpeaker(this)
-        val ears = if (PleosSpeaker.available(this)) PleosVoiceInput(this) { why -> Log.w(TAG, "음성 명령을 들을 수 없음: $why") } else null
+        val ears = voiceInputOrNull()
         bridge = DocentBridge(
             liveFactory = { PleosSignalSource(this, voiceWatch = ::watchNaviVoice).also { live = it } },
             onLiveStart = ::askLocationIfNeeded,
@@ -45,6 +46,14 @@ class MainActivity : Activity() {
         web.webViewClient = WebViewClient()
         setContentView(web)
         web.loadUrl("file:///android_asset/index.html")
+    }
+
+    /** 음성 명령 듣기: Pleos 기기에서만 Pleos SpeechToText. 만들다 예외가 나면(권한 · 서비스) 화면의 흉내 단추로만 */
+    private fun voiceInputOrNull(): VoiceInput? = try {
+        if (PleosSpeaker.available(this)) PleosVoiceInput(this) { why -> Log.w(TAG, "음성 명령을 들을 수 없음: $why") } else null
+    } catch (t: Throwable) {
+        Log.w(TAG, "Pleos SpeechToText 를 붙이지 못함", t)
+        null
     }
 
     /** 내비 안내 음성 감시 (Pleos SDK 에 없는 값 · AudioManager) · 멈추는 함수를 돌려줌 */

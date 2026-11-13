@@ -20,7 +20,7 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 ## 테스트 환경과 필요한 설정
 
 - 필요한 설정: 없음. 앱 코드는 외부 API·키를 쓰지 않음 (글꼴 포함). Pleos SDK는 공개 저장소(`nexus-playground.pleos.ai`)에서 Gradle이 받음. 인터넷 권한은 Pleos TextToSpeech SDK 묶음이 자체 검증용으로 넣는 것 하나
-- 권한: Pleos 읽기 권한만 선언(방향지시등·주행·조향·도어·좌석·내비 경로·위치), 위치는 '차량 신호'를 켤 때 요청. 차량 제어 권한은 없음
+- 권한: Pleos 읽기 권한(방향지시등·주행·조향·도어·좌석·내비 경로·위치)과 음성 권한 둘(TextToSpeech·SpeechToText)만 선언, 위치는 '차량 신호'를 켤 때 요청. 차량 제어 권한은 없음. Pleos SDK 를 만들거나 부르다 예외가 나도 앱은 꺼지지 않고 다음 수단(안드로이드 음성, 시연 신호)으로 넘어감
 - 단위 테스트: JVM(JDK 17)에서 실행, 차량·에뮬레이터 없이 돎. CI가 push마다 실행
 - 앱: Android 10(API 29) 이상. 화면은 1920×1080(차량 화면 1920×720 + 시연용 신호 판) 기준으로 그리고, 기기 화면 크기에 맞춰 전체가 보이게 자동으로 맞춤
 

@@ -14,6 +14,114 @@ interface Speaker {
 }
 
 /**
+ * 말하는 장치 차례 (앱: Pleos TextToSpeech → 안드로이드 TTS → 소리 없음).
+ * 장치를 만들다 예외가 나거나(권한 · 서비스 없음), speak 가 예외를 던지거나, 장치가 연결 실패(unavailable)를 알리면 다음 장치로 넘김.
+ * 넘기는 사이 그 장치가 말하던 문장은 다음 장치가 말함. 쓸 장치가 하나도 없으면 문장마다 failed 로 알리고, 앱은 꺼지지 않음.
+ * stop · release 의 예외는 기록만 함.
+ */
+class SpeakerChain(
+    private val makers: List<Maker>,
+    private val log: (String, Throwable?) -> Unit = { _, _ -> },
+) : Speaker {
+    /** 장치 하나. make 는 연결 실패를 알릴 함수를 받아 장치를 만듦 */
+    class Maker(val name: String, val make: (unavailable: (String) -> Unit) -> Speaker)
+
+    private var at = -1
+    private var current: Speaker? = null
+
+    /** 지금 말하는 장치 이름 (화면에 보임) */
+    @Volatile
+    var name: String = NONE
+        private set
+
+    init {
+        moveOn(-1, null)
+    }
+
+    override fun speak(text: String, language: String, done: () -> Unit, failed: (String) -> Unit) {
+        while (true) {
+            val (i, s) = synchronized(this) { at to current }
+            if (s == null) {
+                failed(NONE)
+                return
+            }
+            // 이 장치가 연결 실패로 빠진 뒤 오는 실패는 알리지 않고 다음 장치가 이 문장을 말함
+            val fail: (String) -> Unit = { why -> if (synchronized(this) { at } != i) speak(text, language, done, failed) else failed(why) }
+            try {
+                s.speak(text, language, done, fail)
+                return
+            } catch (t: Throwable) {
+                moveOn(i, "speak 예외", t)
+            }
+        }
+    }
+
+    override fun stop() {
+        val s = synchronized(this) { current } ?: return
+        quiet("stop", s::stop)
+    }
+
+    override fun release() {
+        val s = synchronized(this) {
+            at = makers.size
+            name = NONE
+            current.also { current = null }
+        } ?: return
+        quiet("release", s::release)
+    }
+
+    /** from 번째 장치를 못 씀 → 다음 장치를 만듦 (다른 데서 이미 넘겼으면 그대로) */
+    private fun moveOn(from: Int, why: String?, cause: Throwable? = null) {
+        val old = synchronized(this) {
+            if (from != at) return
+            current.also { current = null }
+        }
+        if (why != null) log("${makers.getOrNull(from)?.name} 못 씀: $why", cause)
+        old?.let { quiet("release", it::release) }
+        var i = from + 1
+        while (i < makers.size) {
+            val idx = i
+            synchronized(this) { at = idx }
+            val made = try {
+                makers[idx].make { w -> moveOn(idx, w) }
+            } catch (t: Throwable) {
+                log("${makers[idx].name} 만들기 실패", t)
+                null
+            }
+            val kept = synchronized(this) {
+                when {
+                    at != idx -> false // 만드는 동안 연결 실패를 알려 이미 다음 장치로 넘어감
+                    made != null -> { current = made; name = makers[idx].name; true }
+                    else -> null
+                }
+            }
+            if (kept == true) return
+            if (kept == false) {
+                made?.let { quiet("release", it::release) }
+                return
+            }
+            i++
+        }
+        synchronized(this) {
+            at = makers.size
+            name = NONE
+        }
+    }
+
+    private fun quiet(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            log("$name $what 예외", t)
+        }
+    }
+
+    companion object {
+        const val NONE = "말하는 장치 없음"
+    }
+}
+
+/**
  * 해설 한 편을 문장 단위로 말하고, 해설 방식(NarrationGate)에 따라 바로 멈추고 이어 감.
  * - 멈춤(HOLD: 방향지시등 · 큰 조향 · 내비 안내 음성 · 위험 구간): 말하던 중이라도 바로 끊고, 끊긴 문장을 기억
  * - 멈춤이 풀리면: 「아까 하던 이야기 이어서 할게요」 한마디 뒤 끊긴 문장을 처음부터 다시 말하고 이어 감.
@@ -224,7 +332,7 @@ class Narrator(
 
     fun release() {
         stopAll()
-        speaker.release()
+        runCatching { speaker.release() }
     }
 
     private fun start(next: Story) {
@@ -302,7 +410,12 @@ class Narrator(
         speaking = text
         lines += Line(text, resume = resume)
         if (lines.size > MAX_LINES) lines.removeAt(0)
-        speaker.speak(text, language, { finished(my, null) }, { why -> finished(my, why) })
+        try {
+            speaker.speak(text, language, { finished(my, null) }, { why -> finished(my, why) })
+        } catch (t: Throwable) {
+            // 말하는 장치가 던져도 해설은 다음 문장으로 (앱에서는 SpeakerChain 이 먼저 다음 장치로 넘김)
+            finished(my, t.javaClass.simpleName)
+        }
     }
 
     @Synchronized
@@ -345,7 +458,7 @@ class Narrator(
     private fun cancelSpeech(markCut: Boolean = false) {
         if (state == State.SPEAKING) {
             token++
-            speaker.stop()
+            runCatching { speaker.stop() }
             if (markCut && lines.isNotEmpty()) lines[lines.size - 1] = lines.last().copy(cut = true)
         }
         speaking = null

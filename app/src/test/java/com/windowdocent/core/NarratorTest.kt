@@ -352,4 +352,84 @@ class NarratorTest {
         speaker.finish()
         assertTrue(narrator.snapshot().awaitingAnswer)
     }
+
+    // ── 말하는 장치가 예외를 던질 때 (11/14 에뮬레이터: 음성 권한이 없어 Pleos TextToSpeech 가 SecurityException) ──
+
+    /** 예외를 던지는 말하는 장치 */
+    private class ThrowingSpeaker(val onSpeak: Boolean = true) : Speaker {
+        override fun speak(text: String, language: String, done: () -> Unit, failed: (String) -> Unit) {
+            if (onSpeak) throw SecurityException("Permission pleos.car.permission.TTS_SERVICE is required")
+        }
+        override fun stop() = throw IllegalStateException("stop")
+        override fun release() = throw IllegalStateException("release")
+    }
+
+    @Test fun narratorKeepsGoingWhenTheSpeakerThrows() {
+        val n = Narrator(ThrowingSpeaker(), clock = { now })
+        n.play(story)                                     // 예외가 밖으로 나오지 않음
+        val s = n.snapshot()
+        assertEquals(Narrator.State.DONE, s.state)        // 못 말한 문장은 건너뛰고 끝까지
+        assertEquals("SecurityException", s.error)
+        n.onMode(NarrationMode.HOLD)
+        n.release()                                       // stop · release 예외도 삼킴
+    }
+
+    @Test fun chainSkipsADeviceThatThrowsWhenMade() {
+        val logged = ArrayList<String>()
+        val second = FakeSpeaker()
+        val chain = SpeakerChain(
+            listOf(
+                SpeakerChain.Maker("Pleos TextToSpeech") { throw SecurityException("TTS_SERVICE") },
+                SpeakerChain.Maker("안드로이드 TTS") { second },
+            ),
+            log = { msg, _ -> logged += msg },
+        )
+        assertEquals("안드로이드 TTS", chain.name)
+        assertEquals(listOf("Pleos TextToSpeech 만들기 실패"), logged)
+        val n = Narrator(chain, clock = { now })
+        n.play(story)
+        assertEquals(listOf("첫 문장이에요."), second.said)
+    }
+
+    @Test fun chainMovesOnWhenSpeakThrowsAndSaysTheSameSentence() {
+        val second = FakeSpeaker()
+        val chain = SpeakerChain(listOf(SpeakerChain.Maker("A") { ThrowingSpeaker() }, SpeakerChain.Maker("B") { second }))
+        assertEquals("A", chain.name)
+        val n = Narrator(chain, clock = { now })
+        n.play(story)
+        assertEquals("B", chain.name)
+        assertEquals(listOf("첫 문장이에요."), second.said)       // 던진 문장을 다음 장치가 그대로 말함
+        assertNull(n.snapshot().error)
+        second.finish()
+        assertEquals("둘째 문장이에요.", second.said.last())
+    }
+
+    @Test fun chainHandsAPendingSentenceToTheNextDeviceWhenConnectionFails() {
+        // Pleos 처럼 연결 전에 받은 문장을 기다리다 연결 실패(unavailable)를 알리고 그 문장을 실패로 돌려줌
+        var unavailable: ((String) -> Unit)? = null
+        var pending: ((String) -> Unit)? = null
+        val slow = object : Speaker {
+            override fun speak(text: String, language: String, done: () -> Unit, failed: (String) -> Unit) { pending = failed }
+            override fun stop() {}
+        }
+        val second = FakeSpeaker()
+        val chain = SpeakerChain(listOf(SpeakerChain.Maker("A") { u -> unavailable = u; slow }, SpeakerChain.Maker("B") { second }))
+        val n = Narrator(chain, clock = { now })
+        n.play(story)
+        unavailable!!("NOT_CONNECTED")
+        pending!!("NOT_CONNECTED")
+        assertEquals("B", chain.name)
+        assertEquals(listOf("첫 문장이에요."), second.said)
+        assertNull(n.snapshot().error)
+    }
+
+    @Test fun chainReportsWhenNoDeviceIsLeft() {
+        val chain = SpeakerChain(listOf(SpeakerChain.Maker("A") { throw SecurityException("x") }, SpeakerChain.Maker("B") { ThrowingSpeaker() }))
+        var why: String? = null
+        chain.speak("안녕하세요.", "ko", {}, { why = it })
+        assertEquals(SpeakerChain.NONE, why)
+        assertEquals(SpeakerChain.NONE, chain.name)
+        chain.stop()
+        chain.release()
+    }
 }
