@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.windowdocent.core.LiveSignalSource
@@ -44,6 +46,15 @@ class MainActivity : Activity() {
         // 화면이 뜰 때부터 window.Docent 로 엔진을 부를 수 있게 먼저 붙임
         web.addJavascriptInterface(bridge, "Docent")
         web.webViewClient = WebViewClient()
+        // 화면 글 기록(console)을 logcat 의 DocentWeb 으로 · 에뮬레이터에서 화면 맞춤 · 오류를 adb 로 확인
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(m: ConsoleMessage): Boolean {
+                Log.i("DocentWeb", "${m.message()} (${m.lineNumber()})")
+                return true
+            }
+        }
+        // adb 로 연결한 PC 에서만 열리는 WebView 확인 창 (에뮬레이터에서 화면 크기 · 상태를 읽음 · 비밀값 없음)
+        WebView.setWebContentsDebuggingEnabled(true)
         setContentView(web)
         web.loadUrl("file:///android_asset/index.html")
     }

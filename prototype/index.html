@@ -956,6 +956,8 @@ function fit(){
   const k = Math.min(w / 1920, h / 1080);
   const dx = Math.max(0, (w - 1920 * k) / 2), dy = Math.max(0, (h - 1080 * k) / 2);
   document.body.style.transform = (Math.abs(k - 1) < 0.001 && dx < 1 && dy < 1) ? '' : 'translate(' + dx + 'px,' + dy + 'px) scale(' + k + ')';
+  const note = 'fit ' + w + 'x' + h + ' dpr ' + devicePixelRatio + ' k ' + k.toFixed(3);
+  if (note !== fit.last) { fit.last = note; console.log(note); }   // 앱에서는 logcat DocentWeb 으로 (에뮬레이터 화면 맞춤 확인)
 }
 window.addEventListener('resize', fit);
 window.addEventListener('load', fit);

@@ -17,6 +17,8 @@ import java.util.Locale
  * - 기기 안 음성(Mode.ON_DEVICE): 통신이 끊겨도 말하게. 서버 음성(registerApp)은 쓰지 않음
  * - 연결(initialize)이 끝나기 전에 온 문장은 기다렸다 말함. 연결에 실패하면 unavailable 을 불러 다른 장치로 넘김
  * - 매니페스트에 pleos.car.permission.TTS_SERVICE 가 있어야 함. 없으면 addEventListener 가 SecurityException (11/14 에뮬레이터)
+ * - 듣는 함수(addEventListener)는 연결(initialize)이 끝난 뒤에 붙임. 먼저 붙이면 SDK 안의 서비스가 아직 없어
+ *   UninitializedPropertyAccessException (11/14 에뮬레이터 2.1.0 · SpeechToText 는 먼저 붙여도 됨)
  *   만들다 예외가 나면 AppSpeaker(SpeakerChain) 가 안드로이드 TTS 로 넘김
  * 컴파일은 SDK 로 확인했고, Pleos Connect 에뮬레이터에서의 실행 확인은 2차 준비 기간에 함.
  */
@@ -51,9 +53,15 @@ class PleosSpeaker(
     }
 
     init {
-        tts.addEventListener(events)
         tts.initialize(object : OnInitializeListener {
             override fun onSuccess() {
+                try {
+                    tts.addEventListener(events)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "TextToSpeech 듣는 함수를 못 붙임", t)
+                    failInit(t.javaClass.simpleName)
+                    return
+                }
                 val next = synchronized(this@PleosSpeaker) {
                     ready = true
                     pending.also { pending = null }
@@ -63,14 +71,19 @@ class PleosSpeaker(
 
             override fun onFailure(errorType: ErrorType) {
                 Log.w(TAG, "TextToSpeech 연결 실패: $errorType")
-                val waiting = synchronized(this@PleosSpeaker) {
-                    failedInit = true
-                    pending.also { pending = null }
-                }
-                unavailable(errorType.name)
-                waiting?.failed(errorType.name)
+                failInit(errorType.name)
             }
         })
+    }
+
+    /** 연결 실패: 기다리던 문장을 돌려주고 다음 장치로 넘기게 알림 */
+    private fun failInit(why: String) {
+        val waiting = synchronized(this) {
+            failedInit = true
+            pending.also { pending = null }
+        }
+        unavailable(why)
+        waiting?.failed(why)
     }
 
     override fun speak(text: String, language: String, done: () -> Unit, failed: (String) -> Unit) {
