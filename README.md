@@ -30,7 +30,7 @@ gradle :app:assembleRelease
 | 가속 | WHPX |
 | 도구 | adb 37.0.1, 에뮬레이터 37.2.13, 가상 콘솔 |
 | 빌드 | GitHub Actions, JDK 17 |
-| 단위 테스트 | JVM 에서 158개, 차량 없이 돎 |
+| 단위 테스트 | JVM 에서 163개, 차량 없이 돎 |
 
 ## 3. 필요한 설정
 
@@ -83,6 +83,7 @@ gradle :app:assembleRelease
 | 3 가까워지면 해설, 예정 보이기 | 완료 | NarrationSchedule.kt |
 | 기능 1 지나친 곳은 지난 뒤 한 줄 | 완료 | DocentBridge.kt |
 | 기능 2 들러볼 곳 제안, 가자로 경유지 | 완료, 내비 반영은 에뮬레이터 확인 전 | DocentBridge.kt 외 2 |
+| 기능 3 가족 퀴즈 문제, 들은 답 채점, 점수 | 완료, 여행 기록 저장은 진행 중 | Quiz.kt 외 1 |
 | 4 음성 명령, 다시 말하기 | 완료, 마이크 확인 전 | VoiceCommand.kt 외 1 |
 | 5 ~ 8 경유지, 퀴즈, 기록과 QR, 외국어 | 진행 중 | |
 
@@ -103,6 +104,7 @@ gradle :app:assembleRelease
 | sample-data/scenario-a.js | 경로 2, 명소 7 | 기획안 시나리오 A | 내비 경로, TourAPI |
 | sample-data/stories.js | 지나친 곳 한 줄 3 | 시나리오 A 명소 셋, 사실 숫자 없음 | TourAPI 소개글 |
 | sample-data/stories.js | 들러볼 곳 1 | 시나리오 A 죽녹원 대나무축제 | TourAPI 행사 정보 |
+| sample-data/stories.js | 퀴즈 3 | 지나친 곳 한 줄 안의 낱말이 답 | TourAPI 사실로 만든 문제 |
 
 - 공모전이 주지 않는 자료만 임의로 씀
 - 화면에도 시연 자료라고 적음
@@ -133,6 +135,7 @@ gradle :app:assembleRelease
 | AudienceSelector | 좌석과 언어로 운전자, 가족, 외국어 모드 |
 | FactGuard | 사실 자료에 없는 숫자를 막음 |
 | Narrator | 문장마다 말하고 멈추고 이어 말함, 다시 말하기 |
+| QuizBook | 퀴즈 답에 꼭 들어야 하는 낱말로 채점, 점수 |
 | NarrationSchedule | 해설 예정과 시작 지점 |
 | VoiceCommand | 들은 말을 명령으로, 다시, 응, 나중에, 가자 |
 | CautionZone | 위험 지점 300m 앞부터 지난 뒤까지 멈춤 |

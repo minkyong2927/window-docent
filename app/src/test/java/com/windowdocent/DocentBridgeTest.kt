@@ -597,4 +597,35 @@ class DocentBridgeTest {
         assertEquals("차량 신호를 켜면 내비에 넣음", r.getJSONObject("waypoint").getString("navi"))
         assertEquals("차량 신호가 꺼져 있음", JSONObject(bridge.route(juknok)).getString("navi"))
     }
+
+    // ── 가족 퀴즈 (기능 3 · 마-3) ─────────────────────────────────────────────────────
+    @Test fun quizIsAskedThenTheHeardAnswerIsScored() {
+        val speaker = FakeSpeaker()
+        val ears = FakeEars()
+        val bridge = DocentBridge(speaker = speaker, voiceInput = ears)
+        bridge.evaluate(state())
+        bridge.quiz("""{"id":"gyeryong","question":"계룡산 이름에 숨어 있는 동물 두 마리는 뭘까요?","must":["닭","용"],"right":"정답이에요! 1점!","wrong":"아쉬워요."}""")
+        assertEquals("ko:계룡산 이름에 숨어 있는 동물 두 마리는 뭘까요?", speaker.said.last())
+        ears.next = "닭이랑 용!"
+        speaker.finish()                                         // 문제를 다 물음
+        val v = JSONObject(bridge.voiceState("{}"))              // 답을 한 번 들음 → 채점
+        assertEquals(1, ears.listens)
+        assertEquals("ANSWER", v.getJSONObject("heard").getString("command"))
+        assertTrue(v.getJSONObject("heard").getJSONObject("quiz").getBoolean("ok"))
+        assertEquals("ko:정답이에요!", speaker.said.last())
+        val q = JSONObject(bridge.voiceState("{}")).getJSONObject("quiz")
+        assertEquals(1, q.getInt("asked")); assertEquals(1, q.getInt("right")); assertTrue(q.isNull("asking"))
+    }
+
+    @Test fun repeatDuringQuizSaysTheQuestionAgain() {
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker)
+        bridge.evaluate(state())
+        bridge.quiz("""{"id":"naejang","question":"내장산은 어느 계절에 가장 유명할까요?","must":["가을"],"right":"정답!","wrong":"아쉬워요. 정답은 가을이에요."}""")
+        bridge.command("""{"text":"다시"}""")
+        assertEquals("ko:내장산은 어느 계절에 가장 유명할까요?", speaker.said.last())
+        val r = JSONObject(bridge.command("""{"text":"여름"}"""))
+        assertFalse(r.getJSONObject("heard").getJSONObject("quiz").getBoolean("ok"))
+        assertEquals("ko:아쉬워요.", speaker.said.last())
+    }
 }

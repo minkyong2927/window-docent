@@ -13,6 +13,8 @@ import com.windowdocent.core.ScheduleEntry
 import com.windowdocent.core.Place
 import com.windowdocent.core.Poi
 import com.windowdocent.core.PrototypeSignalSource
+import com.windowdocent.core.QuizBook
+import com.windowdocent.core.QuizItem
 import com.windowdocent.core.RoutePoiPlanner
 import com.windowdocent.core.RouteStart
 import com.windowdocent.core.ScheduleStatus
@@ -75,6 +77,9 @@ class DocentBridge(
     @Volatile
     private var listening = false
     private var heard: JSONObject? = null
+    /** 가족 퀴즈 (기능 3) · 문제를 다 물으면 답을 한 번 들음 */
+    private val quiz = QuizBook()
+    private var listenedForQuiz = false
     /** 지금 제안한 들러볼 곳 (기능 2 · 「가자」 를 기다림) */
     private var suggestion: Place? = null
     /** 마지막 경유지 요청 결과 {id, name, navi} */
@@ -217,9 +222,14 @@ class DocentBridge(
             } else if (!before.awaitingAnswer) {
                 listenedForOffer = false
             }
+            // 퀴즈 문제를 다 말했으면 답을 한 번 들음
+            if (quiz.current != null && before.storyId == quiz.current?.id + QUIZ_SUFFIX && before.state == Narrator.State.DONE) {
+                if (!listenedForQuiz && startListening()) listenedForQuiz = true
+            }
         }
         out.put("listening", listening).put("canListen", voiceInput != null).put("heard", heard ?: JSONObject.NULL)
         out.put("suggesting", suggestion?.id ?: JSONObject.NULL).put("waypoint", waypoint ?: JSONObject.NULL)
+        out.put("quiz", JSONObject().put("asking", quiz.current?.id ?: JSONObject.NULL).put("asked", quiz.asked).put("right", quiz.right))
         val s = n?.snapshot() ?: return out.toString()
         val lines = JSONArray()
         for (line in s.lines) lines.put(JSONObject().put("t", line.text).put("cut", line.cut).put("resume", line.resume))
@@ -432,6 +442,14 @@ class DocentBridge(
 
     private fun handleCommand(text: String) {
         val command = VoiceCommand.parse(text)
+        // 퀴즈 답을 기다리면 들은 말은 답 (「다시」 는 문제를 한 번 더)
+        if (quiz.current != null && command != Command.REPEAT) {
+            val r = quiz.answer(text) ?: return
+            narrator?.play(Narrator.Story(r.id + QUIZ_SUFFIX + ":a", "퀴즈", Narrator.split(r.line)))
+            heard = JSONObject().put("text", text).put("command", "ANSWER").put("done", true).put("atMs", System.currentTimeMillis())
+                .put("quiz", JSONObject().put("id", r.id).put("ok", r.ok).put("line", r.line))
+            return
+        }
         val done = when (command) {
             Command.REPEAT -> narrator?.repeat() == true
             Command.YES, Command.NO -> {
@@ -471,6 +489,21 @@ class DocentBridge(
         val navi = if (liveOn && src != null) src.addWaypoint(place) else "차량 신호를 켜면 내비에 넣음"
         waypoint = JSONObject().put("id", place.id).put("name", place.name).put("navi", navi)
         return true
+    }
+
+    /**
+     * 가족 퀴즈 한 문제 (기능 3). 입력 {"id","question","must":[낱말],"right","wrong"} · 문제를 말하고 다 물으면 답을 한 번 들음.
+     * 답은 command(들은 말) 로 채점 · 출력은 voiceState 와 같음 (quiz {asking, asked, right})
+     */
+    @JavascriptInterface
+    fun quiz(requestJson: String): String {
+        val o = JSONObject(requestJson)
+        val must = o.optJSONArray("must")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
+        val item = QuizItem(o.optString("id"), o.optString("question"), must, o.optString("right"), o.optString("wrong"))
+        quiz.ask(item)
+        listenedForQuiz = false
+        narrator?.play(Narrator.Story(item.id + QUIZ_SUFFIX, "퀴즈", Narrator.split(item.question)))
+        return voiceState("{}")
     }
 
     /** 확인용: 내비에 목적지 경로를 요청 (에뮬레이터에서 안내 값을 받을 때). 입력 {"id","name","lat","lng"} · 출력 {"navi"} */
@@ -543,6 +576,8 @@ class DocentBridge(
         const val PASSED_SUFFIX = ":passed"
         /** 들러볼 곳 제안 글의 이야기 id 꼬리 */
         const val SUGGEST_SUFFIX = ":suggest"
+        /** 퀴즈 문제의 이야기 id 꼬리 */
+        const val QUIZ_SUFFIX = ":quiz"
 
         fun poisOf(v: Any?): List<Poi> = list(v).mapNotNull { p ->
             val m = p as? Map<*, *> ?: return@mapNotNull null
