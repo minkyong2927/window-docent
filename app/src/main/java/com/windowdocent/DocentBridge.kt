@@ -3,6 +3,7 @@ package com.windowdocent
 import android.webkit.JavascriptInterface
 import com.windowdocent.core.DocentEngine
 import com.windowdocent.core.LatLng
+import com.windowdocent.core.Command
 import com.windowdocent.core.LiveSignalSource
 import com.windowdocent.core.NavGuidance
 import com.windowdocent.core.Narrator
@@ -14,6 +15,8 @@ import com.windowdocent.core.RouteStart
 import com.windowdocent.core.ScheduleStatus
 import com.windowdocent.core.Speaker
 import com.windowdocent.core.TurnSignal
+import com.windowdocent.core.VoiceCommand
+import com.windowdocent.core.VoiceInput
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -21,6 +24,7 @@ import org.json.JSONObject
  * 프로토타입 화면(WebView) ↔ Kotlin 엔진 다리. 화면은 JSON 문자열만 주고받고, 판단은 전부 DocentEngine 이 함.
  * 화면에서는 window.Docent 로 보임: Docent.evaluate(...) · Docent.plan(...) · Docent.narrate(...) · Docent.live(...) · Docent.liveState(...)
  *   · Docent.speak(...) · Docent.voiceState(...) · Docent.voiceStop(...) · Docent.voiceAnswer(...) · Docent.schedule(...) · Docent.progress(...)
+ *   · Docent.listen(...) · Docent.command(...)
  *
  * 신호는 기본이 화면의 시연용 신호 판(PrototypeSignalSource). 화면에서 「차량 신호」 를 켜면 실제 차량 신호(LiveSignalSource ·
  * 앱에서는 Pleos SDK 의 PleosSignalSource)로 바꾸고, 끄면 시연 신호로 돌아감.
@@ -30,6 +34,7 @@ import org.json.JSONObject
  * @param runner 공급원 붙이기 · 떼기를 어느 스레드에서 할지 (앱은 메인 스레드 · 테스트는 바로)
  * @param speaker 해설을 소리로 내는 장치. 없으면 화면이 자기 방식(브라우저 음성)으로 말함
  * @param speakerName 화면에 보일 말하는 장치 이름
+ * @param voiceInput 음성 명령을 듣는 장치 (Pleos SpeechToText). 없으면 화면의 흉내 단추로만
  */
 class DocentBridge(
     private val engine: DocentEngine = DocentEngine(),
@@ -38,6 +43,7 @@ class DocentBridge(
     private val runner: (() -> Unit) -> Unit = { it() },
     speaker: Speaker? = null,
     private val speakerName: () -> String = { "" },
+    private val voiceInput: VoiceInput? = null,
 ) {
     private val source = PrototypeSignalSource()
     private val narrator: Narrator? = speaker?.let { Narrator(it) }
@@ -57,6 +63,12 @@ class DocentBridge(
     private var travelledM = 0.0
     private var lastRouteStart: RouteStart? = null
     private val planner = RoutePoiPlanner()
+
+    /** 음성 명령: 듣는 중인지 · 마지막으로 들은 말 · 못 한 이야기를 물은 뒤 한 번 들었는지 */
+    @Volatile
+    private var listening = false
+    private var heard: JSONObject? = null
+    private var listenedForOffer = false
 
     init {
         engine.attach(source)
@@ -178,9 +190,19 @@ class DocentBridge(
     @JavascriptInterface
     fun voiceState(@Suppress("UNUSED_PARAMETER") requestJson: String): String {
         val out = JSONObject().put("available", narrator != null).put("device", speakerName())
-        val n = narrator ?: return out.toString()
-        n.tick()
-        val s = n.snapshot()
+        val n = narrator
+        if (n != null) {
+            n.tick()
+            val before = n.snapshot()
+            // 「지금 들려드릴까요?」 를 다 물었으면 대답을 한 번 들음 (해설 중에 계속 듣지는 않음)
+            if (before.awaitingAnswer && before.state == Narrator.State.DONE) {
+                if (!listenedForOffer && startListening()) listenedForOffer = true
+            } else if (!before.awaitingAnswer) {
+                listenedForOffer = false
+            }
+        }
+        out.put("listening", listening).put("canListen", voiceInput != null).put("heard", heard ?: JSONObject.NULL)
+        val s = n?.snapshot() ?: return out.toString()
         val lines = JSONArray()
         for (line in s.lines) lines.put(JSONObject().put("t", line.text).put("cut", line.cut).put("resume", line.resume))
         val missed = JSONArray()
@@ -312,11 +334,73 @@ class DocentBridge(
             .put("entries", entries)
     }
 
+    /**
+     * 음성 명령 한 마디 듣기 (구현 4번 · 화면의 말하기 단추). Pleos SpeechToText 로만 듣고, 들은 말은 command 와 같이 처리.
+     * 출력은 voiceState 와 같음 (listening · canListen · heard)
+     */
+    @JavascriptInterface
+    fun listen(@Suppress("UNUSED_PARAMETER") requestJson: String): String {
+        startListening()
+        return voiceState("{}")
+    }
+
+    /**
+     * 들은 말(또는 시연 화면의 흉내 단추)을 명령으로. 입력 {"text":"다시"} · 출력은 voiceState 와 같음
+     * 다시 = 방금 말을 한 번 더 · 응 / 아니 = 못 한 이야기 대답 · 가자 = 화면이 경유지 추가로 (heard.command)
+     */
+    @JavascriptInterface
+    fun command(requestJson: String): String {
+        handleCommand(JSONObject(requestJson).optString("text", ""))
+        return voiceState("{}")
+    }
+
+    private fun startListening(): Boolean {
+        val input = voiceInput ?: return false
+        synchronized(this) {
+            if (listening) return false
+            listening = true
+        }
+        val language = engine.decide().language
+        runner {
+            input.listen(
+                language,
+                { text ->
+                    listening = false
+                    handleCommand(text)
+                },
+                { why ->
+                    listening = false
+                    heard = JSONObject().put("text", "").put("command", Command.NONE.name).put("error", why)
+                },
+            )
+        }
+        return true
+    }
+
+    private fun handleCommand(text: String) {
+        val command = VoiceCommand.parse(text)
+        val done = when (command) {
+            Command.REPEAT -> narrator?.repeat() == true
+            Command.YES, Command.NO -> {
+                val n = narrator
+                if (n != null && n.snapshot().awaitingAnswer) {
+                    n.answer(command == Command.YES)
+                    true
+                } else {
+                    false
+                }
+            }
+            Command.GO, Command.NONE -> false
+        }
+        heard = JSONObject().put("text", text).put("command", command.name).put("done", done).put("atMs", System.currentTimeMillis())
+    }
+
     /** 화면을 닫을 때 신호 공급원 · 말하는 장치를 멈춤 */
     fun close() {
         liveOn = false
         engine.detach()
         narrator?.release()
+        voiceInput?.release()
     }
 
     /**

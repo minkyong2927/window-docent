@@ -24,6 +24,8 @@ interface Speaker {
  *   · 시작도 못 하고 지나친 예정 해설 (miss)
  * - 못 한 이야기 모아 듣기: 정차가 5초 넘게 이어지면 한 번, 도착하면 한 번 더 「아까 못 한 이야기가 n개 있어요…」 를 묻고,
  *   응이면 차례로 말함 · 나중에면 넘김. 화면에 따로 다시 듣기 단추는 두지 않음
+ * - 다시라고 말하면 반복(repeat): 말하는 중이면 그 문장을 처음부터 · 문장 사이거나 끝난 뒤 30초 안이면 방금 끝난 문장을 한 번 더 ·
+ *   멈춤 중이면 아무것도 안 함(풀리면 끊긴 문장을 자동으로 다시 말하므로)
  * Pleos TextToSpeech 에는 일시정지가 없어(speak · stop 만) 문장마다 따로 보내고 어느 문장에서 끊겼는지 기억함.
  */
 class Narrator(
@@ -84,6 +86,9 @@ class Narrator(
     private var stopOfferDone = false
     private var arrivalOfferDone = false
     private var stoppedSince: Long? = null
+    private var lastSaid: String? = null
+    private var lastSaidAtMs = 0L
+    private var replaying = false
 
     /** 새 해설을 처음부터 (말하던 것은 끊음 · 멈춰 있던 해설의 남은 문장은 못 한 이야기에) */
     @Synchronized
@@ -151,6 +156,34 @@ class Narrator(
         arrivalOfferDone = true
         wantOffer = true
         offerIfFree()
+    }
+
+    /**
+     * 다시라고 말하면 (음성 명령 「다시」 · 「뭐라고」 · 「한 번 더」 …). 다시 말했으면 true.
+     * 말하는 중 = 그 문장을 처음부터 · 문장 사이나 끝난 뒤 30초 안 = 방금 끝난 문장을 한 번 더 · 멈춤 중 = 안 함
+     */
+    @Synchronized
+    fun repeat(): Boolean {
+        val s = story ?: return false
+        return when (state) {
+            State.SPEAKING -> {
+                val text = speaking ?: return false
+                val resume = speakingResume
+                val replay = replaying
+                cancelSpeech()
+                replaying = replay
+                say(text, s.language, resume)
+                true
+            }
+            State.WAITING, State.DONE -> {
+                val text = lastSaid ?: return false
+                if (clock() - lastSaidAtMs > REPEAT_WINDOW_MS) return false
+                replaying = true
+                say(text, s.language, resume = false)
+                true
+            }
+            else -> false
+        }
     }
 
     /** 시작도 못 한 예정 해설을 못 한 이야기에 (NarrationSchedule 이 지나쳤다고 알려 줄 때) */
@@ -278,6 +311,14 @@ class Narrator(
         if (failure != null) error = failure
         speaking = null
         val s = story ?: return
+        if (replaying) {
+            // 다시 말하기가 끝남: 원래 하던 자리로
+            replaying = false
+            lastSaidAtMs = clock()
+            state = if (index >= s.sentences.size) State.DONE else State.WAITING
+            if (state == State.DONE) offerIfFree() else advance()
+            return
+        }
         if (speakingResume) {
             // 이어 말하기 한마디 뒤 끊긴 문장을 처음부터
             speakingResume = false
@@ -289,6 +330,8 @@ class Narrator(
             }
             return
         }
+        lastSaid = s.sentences[index]
+        lastSaidAtMs = clock()
         index++
         if (index >= s.sentences.size) {
             state = State.DONE
@@ -307,12 +350,14 @@ class Narrator(
         }
         speaking = null
         speakingResume = false
+        replaying = false
     }
 
     companion object {
         const val RESUME_LINE = "아까 하던 이야기 이어서 할게요."
         const val OFFER_ID = "offer"
         const val STOP_OFFER_MS = 5_000L
+        const val REPEAT_WINDOW_MS = 30_000L
         private const val MAX_LINES = 40
 
         fun offerLine(count: Int) = "아까 못 한 이야기가 ${count}개 있어요. 지금 들려드릴까요?"

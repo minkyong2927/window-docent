@@ -270,6 +270,8 @@
       <button class="btn" data-a="drive" id="btnDrive">주행 흉내</button>
       <button class="btn" data-a="live" id="btnLive">차량 신호</button>
       <button class="btn on" data-a="sound" id="btnSound">소리 켬</button>
+      <button class="btn" data-a="say" title="음성 명령 듣기 · 앱(Pleos 기기)에서만 Pleos SpeechToText">🎤 말하기</button>
+      <button class="btn" data-a="again" title="음성 명령 흉내 · 다시 말해 줘">🎤 다시</button>
       <button class="btn ans" data-a="yes" title="음성 명령 흉내 · 응, 들려줘">🎤 응</button>
       <button class="btn ans" data-a="no" title="음성 명령 흉내 · 나중에">🎤 나중에</button>
     </div>
@@ -682,7 +684,7 @@ function makeNarrator(speaker){
   }
   function cancel(markCut){
     if (N.state === 'SPEAKING') { N.token++; speaker.stop(); if (markCut && N.lines.length) N.lines[N.lines.length - 1].cut = true; }
-    N.speaking = null; N.resume = false;
+    N.speaking = null; N.resume = false; N.replaying = false;
   }
   function say(text, resume){
     const my = ++N.token;
@@ -712,7 +714,9 @@ function makeNarrator(speaker){
     if (why) N.error = why;
     N.speaking = null;
     const st = N.story; if (!st) return;
+    if (N.replaying) { N.replaying = false; N.lastSaidAt = Date.now(); N.state = N.index >= st.sentences.length ? 'DONE' : 'WAITING'; if (N.state === 'DONE') offerIfFree(); else advance(); return; }
     if (N.resume) { N.resume = false; N.state = 'WAITING'; if (N.mode !== 'ONE_LINE') say(st.sentences[N.index], false); else advance(); return; }
+    N.lastSaid = st.sentences[N.index]; N.lastSaidAt = Date.now();
     N.index++;
     if (N.index >= st.sentences.length) { N.state = 'DONE'; offerIfFree(); return; }
     N.state = 'WAITING'; advance();
@@ -724,6 +728,13 @@ function makeNarrator(speaker){
     offerIfFree();
   };
   N.miss = st => { addMissed(st, st.sentences); offerIfFree(); };
+  // 다시라고 말하면: 말하는 중 = 그 문장을 처음부터 · 문장 사이나 끝난 뒤 30초 안 = 방금 끝난 문장 한 번 더 · 멈춤 중 = 안 함
+  N.repeat = () => {
+    const st = N.story; if (!st) return false;
+    if (N.state === 'SPEAKING') { const text = N.speaking, resume = N.resume, replay = N.replaying; cancel(false); N.replaying = replay; say(text, resume); return true; }
+    if ((N.state === 'WAITING' || N.state === 'DONE') && N.lastSaid && Date.now() - N.lastSaidAt <= 30000) { N.replaying = true; say(N.lastSaid, false); return true; }
+    return false;
+  };
   N.arrived = () => { if (N.arrivalOfferDone || !N.missed.length) return; N.arrivalOfferDone = true; N.wantOffer = true; offerIfFree(); };
   N.answer = yes => {
     if (!N.awaiting) return; N.awaiting = false; if (!yes) return;
@@ -745,10 +756,49 @@ function makeNarrator(speaker){
     awaiting:N.awaiting, missed:N.missed });
   return N;
 }
+// 음성 명령 (구현 4번): 들은 말을 명령으로. 앱에서는 Kotlin VoiceCommand, 브라우저에서는 같은 규칙의 아래 JS.
+// 음성 인식은 앱의 Pleos SpeechToText 로만 하고 브라우저 음성 인식은 쓰지 않음 (공모전 공지) · 브라우저 시연은 흉내 단추
+const CMD_RULES = [['REPEAT', ['다시', '뭐라고', '한번더', '못들었', 'again', 'repeat', 'pardon', 'otravez', 'repite']],
+  ['NO', ['아니', '나중에', '됐어', '싫어', 'later', 'notnow', 'nothanks', 'despues', 'después']],
+  ['GO', ['가자', '가줘', '들르자', '들러줘', 'letsgo', 'vamos']],
+  ['YES', ['들려줘', '좋아', '그래', '해줘', 'yes', 'sure', 'please', 'claro']]];
+const CMD_SHORT = { '응':'YES', '네':'YES', '예':'YES', ok:'YES', si:'YES', 'sí':'YES', no:'NO' };
+function parseCommand(text){
+  const t = String(text).toLowerCase().replace(/[\s,.!?~'"]+/g, '');
+  if (!t) return 'NONE';
+  if (CMD_SHORT[t]) return CMD_SHORT[t];
+  for (const [c, words] of CMD_RULES) if (words.some(w => t.indexOf(w) >= 0)) return c;
+  const tokens = String(text).toLowerCase().split(/[\s,.!?~]+/).filter(Boolean);
+  return tokens.length && tokens.every(x => CMD_SHORT[x] === 'YES') ? 'YES' : 'NONE';
+}
 const NARR = makeNarrator(browserSpeaker);
 const VOICE = { app:false, seq:0, quiz:false, nextQuiz:false, seen:[], last:'', id:null, arrived:false };
 VOICE.app = !!(BRIDGE && BRIDGE.speak && (callEngine('voiceState', {}) || {}).available);
 function modeOf(d){ return d.reason === 'DOOR_OPEN' ? 'TRIP_RECORD' : d.level === 3 ? 'HOLD' : d.level === 2 ? 'ONE_LINE' : d.level === 0 ? 'LONG_STORY' : 'NARRATE'; }
+// 흉내 단추 · 들은 말 → 명령 (앱은 Kotlin Docent.command, 브라우저는 같은 규칙)
+function voiceCommand(text){
+  let heard;
+  if (VOICE.app) heard = (callEngine('command', { text }) || {}).heard;
+  else {
+    const command = parseCommand(text);
+    const done = command === 'REPEAT' ? NARR.repeat() : (command === 'YES' || command === 'NO') && NARR.snapshot().awaiting ? (NARR.answer(command === 'YES'), true) : false;
+    heard = { text, command, done };
+  }
+  showHeard(heard);
+  voiceTick();
+}
+const CMD_LABEL = { REPEAT:'다시 말하기', YES:'예 · 못 한 이야기 듣기', NO:'아니오 · 나중에', GO:'경유지로 (구현 5번)', NONE:'알아들은 명령 없음' };
+function showHeard(h){
+  if (!h || !h.command) return;
+  kid('「' + h.text + '」', '음성 명령 · ' + (CMD_LABEL[h.command] || h.command) + (h.done === false && h.command !== 'NONE' && h.command !== 'GO' ? ' (지금은 할 일 없음)' : ''), false);
+  VOICE.heardAt = h.atMs || Date.now();
+}
+function voiceSay(){
+  const v = VOICE.app ? callEngine('voiceState', {}) : null;
+  if (!v || !v.canListen) { cap('음성 명령은 앱을 Pleos 기기에서 열 때 Pleos SpeechToText 로 듣습니다 · 지금은 흉내 단추(🎤 다시 · 응 · 나중에)'); return; }
+  callEngine('listen', {});
+  cap('듣는 중 · 「다시」 「응」 「나중에」 「가자」');
+}
 function voiceState(){ if (VOICE.app) return callEngine('voiceState', {}) || { lines:[] }; NARR.tick(); return NARR.snapshot(); }
 
 function doc(text, quiz=false, id=null){
@@ -762,6 +812,7 @@ function doc(text, quiz=false, id=null){
 function voiceTick(){
   const v = voiceState(), lines = v.lines || [], now = Date.now();
   document.body.classList.toggle('ask', !!v.awaiting);
+  if (v.heard && v.heard.atMs && v.heard.atMs !== VOICE.heardAt) showHeard(v.heard);
   if (v.id && (v.id === 'offer' || v.id === 'missed')) $('db').classList.remove('hidden');   // 도착 · 정차 때 제안은 해설 글 상자에
   if ($('db').classList.contains('hidden')) return;
   if (v.id !== VOICE.id) { VOICE.id = v.id; VOICE.seen = []; VOICE.quiz = VOICE.nextQuiz; VOICE.nextQuiz = false; }
@@ -780,6 +831,7 @@ function voiceTick(){
   st.textContent = v.state === 'SPEAKING' ? '· 🔊 ' + (v.device || '음성') + ' · ' + Math.min(v.index + 1, v.total) + '/' + v.total
     : v.state === 'PAUSED' ? '· ❚❚ 멈춤 · 끝나면 이어서'
     : v.state === 'WAITING' ? '· 다음 문장은 지나간 뒤에'
+    : v.listening ? '· 🎤 듣는 중'
     : v.awaiting ? '· 🎤 「응」 또는 「나중에」 를 기다려요'
     : '';
 }
@@ -884,7 +936,10 @@ document.querySelectorAll('.btn').forEach(b => b.onclick = () => {
   if (a === 'lang') S.lang = S.lang === 'ko' ? 'en' : S.lang === 'en' ? 'es' : 'ko';
   if (a === 'door') S.door = !S.door;
   if (a === 'caution') { S.caution = S.caution ? null : 'SCHOOL_ZONE'; S.cautionDist = S.caution ? 200 : null; }
-  if (a === 'yes' || a === 'no') { if (VOICE.app) callEngine('voiceAnswer', { yes: a === 'yes' }); else NARR.answer(a === 'yes'); return voiceTick(); }
+  if (a === 'yes') return voiceCommand('응');
+  if (a === 'no') return voiceCommand('나중에');
+  if (a === 'again') return voiceCommand('다시');
+  if (a === 'say') return voiceSay();
   if (a === 'fact') return factDemo();
   if (a === 'auto') return scenario();
   if (a === 'live') return liveToggle();

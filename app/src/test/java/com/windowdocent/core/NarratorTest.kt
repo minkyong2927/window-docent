@@ -1,6 +1,7 @@
 package com.windowdocent.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -296,5 +297,59 @@ class NarratorTest {
         narrator.onMode(NarrationMode.HOLD); narrator.onMode(NarrationMode.NARRATE); speaker.finish()
         speaker.finish()                                   // 셋째 문장 끝
         assertEquals(Narrator.State.DONE, narrator.snapshot().state)
+    }
+
+    // ── 다시라고 말하면 반복 (추가 3 둘째) ─────────────────────────────────────────
+
+    @Test fun repeatWhileSpeakingRestartsThatSentence() {
+        narrator.play(story)
+        speaker.finish()                                   // 둘째 문장 말하는 중
+        assertTrue(narrator.repeat())
+        assertEquals(1, speaker.stops)
+        assertEquals("둘째 문장이에요.", speaker.said.last())
+        speaker.finish()
+        assertEquals("셋째 문장이에요.", speaker.said.last()) // 그다음은 이어서
+    }
+
+    @Test fun repeatAfterTheEndWithin30SecondsSaysTheLastSentenceAgain() {
+        narrator.play(story)
+        repeat(3) { speaker.finish() }
+        now += 20_000
+        assertTrue(narrator.repeat())
+        assertEquals("셋째 문장이에요.", speaker.said.last())
+        speaker.finish()
+        assertEquals(Narrator.State.DONE, narrator.snapshot().state)
+        now += 31_000
+        assertFalse(narrator.repeat())                     // 30초가 지나면 안 함
+    }
+
+    @Test fun repeatBetweenSentencesThenContinues() {
+        narrator.play(story)
+        narrator.onMode(NarrationMode.ONE_LINE)            // 지금 문장만 끝내고 기다림
+        speaker.finish()
+        assertEquals(Narrator.State.WAITING, narrator.snapshot().state)
+        assertTrue(narrator.repeat())                      // 방금 끝난 첫 문장을 한 번 더
+        assertEquals("첫 문장이에요.", speaker.said.last())
+        speaker.finish()
+        assertEquals(Narrator.State.WAITING, narrator.snapshot().state)
+        narrator.onMode(NarrationMode.NARRATE)
+        assertEquals("둘째 문장이에요.", speaker.said.last())
+    }
+
+    @Test fun repeatWhileHeldDoesNothing() {
+        narrator.play(story)
+        narrator.onMode(NarrationMode.HOLD)
+        assertFalse(narrator.repeat())
+        assertEquals(1, speaker.said.size)
+    }
+
+    @Test fun repeatTheOfferKeepsWaitingForTheAnswer() {
+        missOneSentence()
+        narrator.arrived()
+        speaker.finish()
+        assertTrue(narrator.repeat())
+        assertEquals(Narrator.offerLine(1), speaker.said.last())
+        speaker.finish()
+        assertTrue(narrator.snapshot().awaitingAnswer)
     }
 }

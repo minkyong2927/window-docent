@@ -414,4 +414,55 @@ class DocentBridgeTest {
         assertEquals("cheonan", r.getJSONObject("start").getString("id"))
         assertEquals("첫 문장이에요. 둘째 문장이에요.", r.getJSONObject("start").getString("text"))
     }
+
+    // ── 음성 명령 (Docent.listen · command) ───────────────────────────────────────
+
+    /** 들을 말을 시험이 정하는 음성 입력 */
+    private class FakeEars : com.windowdocent.core.VoiceInput {
+        var next: String? = null
+        var listens = 0
+        override fun listen(language: String, heard: (String) -> Unit, failed: (String) -> Unit) {
+            listens++
+            next?.let(heard) ?: failed("들은 말 없음")
+        }
+        override fun stop() {}
+    }
+
+    @Test fun repeatCommandSaysTheSentenceAgain() {
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker)
+        bridge.evaluate(state())
+        bridge.speak("""{"id":"a","text":"첫 문장이에요. 둘째 문장이에요."}""")
+        speaker.finish()                                         // 둘째 문장 말하는 중
+        val r = JSONObject(bridge.command("""{"text":"뭐라고?"}"""))
+        assertEquals("REPEAT", r.getJSONObject("heard").getString("command"))
+        assertTrue(r.getJSONObject("heard").getBoolean("done"))
+        assertEquals("ko:둘째 문장이에요.", speaker.said.last())
+        assertFalse(r.getBoolean("canListen"))                   // 듣는 장치가 없으면 흉내 단추로만
+    }
+
+    @Test fun listenUsesTheVoiceInputAndAnswersTheOffer() {
+        val speaker = FakeSpeaker()
+        val ears = FakeEars()
+        val bridge = DocentBridge(speaker = speaker, voiceInput = ears)
+        bridge.evaluate(state())
+        bridge.speak("""{"id":"a","text":"첫 문장이에요. 둘째 문장이에요."}""")
+        val near = state().replace("\"lang\":\"ko\"", "\"lang\":\"ko\",\"caution\":\"SCHOOL_ZONE\",\"cautionDist\":200")
+        bridge.evaluate(near); bridge.evaluate(state()); speaker.finish()
+        bridge.evaluate(near); bridge.evaluate(state()); speaker.finish(); speaker.finish()   // 첫 문장은 못 한 이야기로
+        val arrive = state().replace("\"lang\":\"ko\"", "\"lang\":\"ko\",\"arrived\":true")
+        bridge.evaluate(arrive)                                  // 도착 → 물음
+        ears.next = "응 들려줘"
+        speaker.finish()                                         // 물음을 다 말함
+        val v = JSONObject(bridge.voiceState("{}"))              // 물은 뒤 한 번 들음 → 응
+        assertEquals(1, ears.listens)
+        assertEquals("YES", v.getJSONObject("heard").getString("command"))
+        assertEquals("ko:첫 문장이에요.", speaker.said.last())
+        bridge.voiceState("{}")
+        assertEquals(1, ears.listens)                            // 같은 물음에 두 번 듣지 않음
+        ears.next = "다시"
+        JSONObject(bridge.listen("{}"))                          // 말하기 단추
+        assertEquals(2, ears.listens)
+        assertEquals("ko:첫 문장이에요.", speaker.said.last())
+    }
 }
