@@ -105,19 +105,18 @@ class DocentBridgeTest {
         }
     }
 
-    /** prototype/index.html 안의 시연 데이터 블록(<script id="demo-data">) */
+    /** sample-data/scenario-a.js 의 시연 자료(window.DEMO_DATA = {…}) */
     private fun prototypeDemoData(): JSONObject {
         var dir: File? = File(System.getProperty("user.dir")).absoluteFile
         while (dir != null) {
-            val html = File(dir, "prototype/index.html")
-            if (html.isFile) {
-                val block = Regex("""<script id="demo-data" type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
-                    .find(html.readText(Charsets.UTF_8)) ?: error("demo-data 블록이 없음")
-                return JSONObject(block.groupValues[1])
+            val file = File(dir, "sample-data/scenario-a.js")
+            if (file.isFile) {
+                val text = file.readText(Charsets.UTF_8)
+                return JSONObject(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1))
             }
             dir = dir.parentFile
         }
-        error("prototype/index.html 을 찾지 못함")
+        error("sample-data/scenario-a.js 를 찾지 못함")
     }
 
     // ── 실제 차량 신호 켜기 · 끄기 (Docent.live · liveState) ─────────────────────

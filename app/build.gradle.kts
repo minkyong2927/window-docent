@@ -37,7 +37,8 @@ android {
     }
 
     // 웹 프로토타입(prototype/index.html)을 그대로 앱 화면으로 씀
-    sourceSets["main"].assets.srcDirs("../prototype")
+    // 임의 자료(sample-data/)도 같은 assets 맨 위에 (화면이 scenario-a.js 를 읽음)
+    sourceSets["main"].assets.srcDirs("../prototype", "../sample-data")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
