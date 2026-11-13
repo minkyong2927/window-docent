@@ -130,8 +130,9 @@ class PleosSpeaker(
                 tts.setLocale(localeOf(r.language))
                 locale = r.language
             }
-            // 둘째 인자 false: 이어 붙이지 않고 이 문장만 (문장 순서는 Narrator 가 정함)
-            tts.speak(r.text, false)
+            // 둘째 인자는 isFinal: true = 이 문장으로 끝 (false 면 글이 더 오길 기다려 말을 끝내지 않음 · onDone 이 안 옴 · 11/14 에뮬레이터)
+            // 문장 순서는 Narrator 가 정하므로 한 문장씩 끝으로 보냄
+            tts.speak(r.text, true)
         } catch (t: Throwable) {
             Log.w(TAG, "speak 실패", t)
             take()?.failed(t.javaClass.simpleName)
