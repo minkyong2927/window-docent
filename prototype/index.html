@@ -71,6 +71,10 @@
   .bubble{border-radius:18px;padding:18px 24px;transition:opacity .3s}
   .doc{background:var(--panel2)}
   .who{font-size:16px;color:var(--sub);margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  .vstat{font-size:15px;color:var(--sub)}
+  .vstat.on{color:var(--accent)}
+  .vstat.hold{color:var(--warn)}
+  #dt .cut{color:var(--sub)}
   .doc .t{font-size:28px;font-weight:600;line-height:1.4}
   .kid{align-self:flex-end;background:rgba(47,191,155,.14);border:1px solid rgba(47,191,155,.45)}
   .kid .t{font-size:28px;line-height:1.3}
@@ -197,7 +201,7 @@
         </div>
         <div class="place" id="place"><div class="pin">⛰</div><div><div class="n" id="pname">계룡산</div><div class="s" id="psub">오른쪽 · 약 6km</div></div></div>
         <div class="talk">
-          <div class="bubble doc hidden" id="db"><div class="who">도슨트</div><div class="t" id="dt"></div></div>
+          <div class="bubble doc hidden" id="db"><div class="who">도슨트 <span class="vstat" id="vstat"></span></div><div class="t" id="dt"></div></div>
           <div class="bubble kid hidden" id="kb"><div class="who"><span class="mic" id="mic"></span><span id="kwho">뒷좌석</span></div><div class="t" id="kt"></div></div>
         </div>
       </div>
@@ -253,6 +257,7 @@
       <button class="btn" data-a="fact">사실 검증</button>
       <button class="btn" data-a="auto">자동 시연</button>
       <button class="btn" data-a="live" id="btnLive">차량 신호</button>
+      <button class="btn on" data-a="sound" id="btnSound">소리 켬</button>
     </div>
   </div>
   <div class="signals">
@@ -355,6 +360,7 @@ function decide(){
 
 function render(){
   const d = decide(), R = REASON[d.reason];
+  if (!VOICE.app) NARR.onMode(modeOf(d));
   document.querySelectorAll('.seg').forEach(s => s.classList.toggle('on', +s.dataset.l === d.level));
   $('reason').innerHTML = R.why;
   $('pause').classList.toggle('on', d.level === 3);
@@ -476,22 +482,126 @@ function factDemo(){
            : '사실 검증 차단 · 사실 필드에 없는 숫자(' + g.unknown.join(', ') + ')가 초안에 있어 사실 원문으로 바꿔 말합니다');
 }
 
-let typing = null;
-function doc(text, quiz=false){
-  clearInterval(typing);
-  $('db').classList.remove('hidden');
-  const el = $('dt'); el.innerHTML = quiz ? '<span class="quizbadge">퀴즈</span>' : '';
-  const span = document.createElement('span'); el.appendChild(span);
-  let i = 0;
-  typing = setInterval(() => {
-    if ($('pause').classList.contains('on')) { span.textContent += ' —'; clearInterval(typing); return; }
-    span.textContent = text.slice(0, ++i);
-    if (i >= text.length) clearInterval(typing);
-  }, 45);
+// 음성 해설 (바로 멈추고 이어 말하기): 문장마다 따로 말하고, 멈춤(방향지시등 · 큰 조향 · 내비 음성)이면
+// 말하던 중이라도 바로 끊고, 풀리면 「아까 하던 이야기 이어서 할게요」 뒤 끊긴 문장을 처음부터. 분기점 접근은 한 문장까지.
+// 앱에서는 Kotlin Narrator(Docent.speak · voiceState) + Pleos TextToSpeech, 브라우저에서는 같은 규칙의 아래 JS + 브라우저 음성.
+const RESUME_LINE = '아까 하던 이야기 이어서 할게요.';
+const LOCALE = { ko:'ko-KR', en:'en-US', es:'es-ES' };
+let SOUND = true;
+function splitSentences(t){ return String(t).trim().split(/(?<=[.!?。])\s+/).map(x => x.trim()).filter(Boolean); }
+
+// 브라우저용 말하는 장치: 글 길이만큼(글자당 45ms) 시간이 흐르고, 소리를 켜 두었으면 브라우저 음성도 끝날 때까지 기다림
+const browserSpeaker = {
+  timer:null, guard:null, utt:null,
+  speak(text, lang, done){
+    this.stop();
+    let timeUp = false, voiceUp = true, over = false;
+    const end = () => { if (over || !(timeUp && voiceUp)) return; over = true; this.stop(); done(); };
+    const ms = Math.max(600, text.length * 45 + 300);
+    if (SOUND && window.speechSynthesis && window.SpeechSynthesisUtterance) {
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = LOCALE[lang] || 'ko-KR'; u.rate = 1.05;
+        voiceUp = false;
+        u.onend = u.onerror = () => { voiceUp = true; end(); };
+        this.utt = u; speechSynthesis.speak(u);
+        this.guard = setTimeout(() => { voiceUp = true; end(); }, ms * 4 + 3000);   // 음성이 끝을 안 알려도 진행
+      } catch (e) { voiceUp = true; }
+    }
+    this.timer = setTimeout(() => { timeUp = true; end(); }, ms);
+  },
+  stop(){
+    clearTimeout(this.timer); clearTimeout(this.guard); this.timer = this.guard = null;
+    if (this.utt) { this.utt.onend = this.utt.onerror = null; this.utt = null; try { speechSynthesis.cancel(); } catch (e) {} }
+  }
+};
+
+// 브라우저용 Narrator: Kotlin core/Narrator.kt 와 같은 규칙
+function makeNarrator(speaker){
+  const N = { story:null, index:0, state:'IDLE', interrupted:false, mode:'NARRATE', budget:0, token:0, resume:false, speaking:null, error:null, lines:[] };
+  function cancel(markCut){
+    if (N.state === 'SPEAKING') { N.token++; speaker.stop(); if (markCut && N.lines.length) N.lines[N.lines.length - 1].cut = true; }
+    N.speaking = null; N.resume = false;
+  }
+  function say(text, resume){
+    const my = ++N.token;
+    N.state = 'SPEAKING'; N.resume = resume; N.speaking = text;
+    N.lines.push({ t:text, cut:false, resume });
+    speaker.speak(text, N.story.lang || 'ko', () => finished(my, null), why => finished(my, why));
+  }
+  function advance(){
+    const st = N.story; if (!st) return;
+    if (N.state !== 'WAITING' && N.state !== 'PAUSED') return;
+    if (N.mode === 'HOLD' || N.mode === 'TRIP_RECORD') return;
+    if (N.state === 'PAUSED' && N.interrupted) { N.interrupted = false; say(RESUME_LINE, true); return; }
+    if (N.mode === 'ONE_LINE') { if (N.budget <= 0) { N.state = 'WAITING'; return; } N.budget--; }
+    say(st.sentences[N.index], false);
+  }
+  function finished(my, why){
+    if (my !== N.token || N.state !== 'SPEAKING') return;
+    if (why) N.error = why;
+    N.speaking = null;
+    const st = N.story; if (!st) return;
+    if (N.resume) { N.resume = false; N.state = 'WAITING'; if (N.mode !== 'ONE_LINE') say(st.sentences[N.index], false); else advance(); return; }
+    N.index++;
+    if (N.index >= st.sentences.length) { N.state = 'DONE'; return; }
+    N.state = 'WAITING'; advance();
+  }
+  N.play = st => { cancel(false); Object.assign(N, { story:st, index:0, interrupted:false, resume:false, error:null, lines:[] }); N.state = st.sentences.length ? 'WAITING' : 'DONE'; advance(); };
+  N.stopAll = () => { cancel(false); N.story = null; N.lines = []; N.state = 'IDLE'; };
+  N.onMode = m => {
+    const before = N.mode; N.mode = m;
+    if (m === 'ONE_LINE' && before !== 'ONE_LINE') N.budget = N.state === 'SPEAKING' ? 0 : 1;
+    if (m === 'TRIP_RECORD') { if (N.story && N.state !== 'DONE') { cancel(true); N.state = 'DONE'; } }
+    else if (m === 'HOLD') { if (N.state === 'SPEAKING') { cancel(true); N.interrupted = true; N.state = 'PAUSED'; } }
+    else advance();
+  };
+  N.snapshot = () => ({ available:true, device: SOUND && window.speechSynthesis ? '브라우저 음성' : '소리 없음', id:N.story && N.story.id,
+    title:N.story && N.story.title, state:N.state, index:N.index, total:N.story ? N.story.sentences.length : 0, speaking:N.speaking, error:N.error, lines:N.lines });
+  return N;
 }
+const NARR = makeNarrator(browserSpeaker);
+const VOICE = { app:false, seq:0, quiz:false, seen:[], last:'' };
+VOICE.app = !!(BRIDGE && BRIDGE.speak && (callEngine('voiceState', {}) || {}).available);
+function modeOf(d){ return d.reason === 'DOOR_OPEN' ? 'TRIP_RECORD' : d.level === 3 ? 'HOLD' : d.level === 2 ? 'ONE_LINE' : d.level === 0 ? 'LONG_STORY' : 'NARRATE'; }
+function voiceState(){ return VOICE.app ? (callEngine('voiceState', {}) || { lines:[] }) : NARR.snapshot(); }
+
+function doc(text, quiz=false){
+  $('db').classList.remove('hidden');
+  VOICE.quiz = quiz; VOICE.seen = [];
+  const story = { id:'d' + (++VOICE.seq), title: quiz ? '퀴즈' : '해설', sentences: splitSentences(text), lang:'ko' };
+  if (VOICE.app) callEngine('speak', story); else NARR.play(story);
+  voiceTick();
+}
+// 말한 줄을 화면에: 앞 줄은 다, 지금 줄은 말하는 만큼(글자당 45ms), 끊긴 줄은 끊긴 데까지 + ' —'
+function voiceTick(){
+  if ($('db').classList.contains('hidden')) return;
+  const v = voiceState(), lines = v.lines || [], now = Date.now();
+  let html = VOICE.quiz ? '<span class="quizbadge">퀴즈</span>' : '';
+  lines.forEach((l, i) => {
+    const seen = VOICE.seen[i] && VOICE.seen[i].t === l.t ? VOICE.seen[i] : (VOICE.seen[i] = { t:l.t, at:now, cutAt:null });
+    if (l.cut && !seen.cutAt) seen.cutAt = now;
+    const live = i === lines.length - 1 && v.state === 'SPEAKING';
+    const n = l.cut ? Math.max(1, Math.floor((seen.cutAt - seen.at) / 45)) : live ? Math.floor((now - seen.at) / 45) : l.t.length;
+    const text = l.t.slice(0, Math.min(l.t.length, n));
+    html += (i ? ' ' : '') + (l.cut ? '<span class="cut">' + esc(text) + ' —</span>' : esc(text));
+  });
+  if (html !== VOICE.last) { $('dt').innerHTML = html; VOICE.last = html; }
+  const st = $('vstat');
+  st.className = 'vstat' + (v.state === 'SPEAKING' ? ' on' : v.state === 'PAUSED' ? ' hold' : '');
+  st.textContent = v.state === 'SPEAKING' ? '· 🔊 ' + (v.device || '음성') + ' · ' + Math.min(v.index + 1, v.total) + '/' + v.total
+    : v.state === 'PAUSED' ? '· ❚❚ 멈춤 · 끝나면 이어서'
+    : v.state === 'WAITING' ? '· 다음 문장은 지나간 뒤에'
+    : '';
+}
+function esc(t){ return String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' })[c]); }
+setInterval(voiceTick, 120);
 function kid(text, who='뒷좌석 · 아이', live=true){ $('kb').classList.remove('hidden'); $('kt').textContent = text; $('kwho').textContent = who; $('mic').classList.toggle('live', live); }
 function hideKid(){ $('kb').classList.add('hidden'); }
-function hideDoc(){ $('db').classList.add('hidden'); clearInterval(typing); }
+function hideDoc(){
+  $('db').classList.add('hidden');
+  if (VOICE.app) callEngine('voiceStop', {}); else NARR.stopAll();
+}
 function place(icon, n, s){ $('place').classList.add('on'); $('place').querySelector('.pin').textContent = icon; $('pname').textContent = n; $('psub').textContent = s; }
 function stop(k, state){
   STOPSTATE[k] = state || '';
@@ -536,17 +646,16 @@ async function scenario(){
 
   cap('분기점에서 내비 안내가 나오면 해설을 멈추고 길 안내가 먼저 나옵니다');
   S.nav = 'near'; S.navDist = 1000; nav('1km', '호남고속도로 방면', '↗'); render();
-  doc('계룡산 근처에는 옛날 이야기가 아주 많은데요, 그중 하나가');
-  await wait(2600);
+  doc('계룡산 근처에는 옛날 이야기가 아주 많아요. 계룡산 이야기는 도착해서 기록으로도 볼 수 있어요.');
+  await wait(700);
   S.nav = 'voice'; render();
   await wait(2400);
   S.nav = null; S.navDist = null; S.turn = 'right'; S.steer = 18; render(); car(330, 400, 25);
   await wait(2200);
   S.turn = 'off'; S.steer = 0; render(); nav('42km', '호남고속도로 직진', '↑'); car(360, 360, 40);
   await wait(1200);
-  cap('분기점을 지나면 하던 이야기를 이어서 합니다');
-  doc('아까 하던 이야기 이어서 할게요. 계룡산 이야기는 도착해서 기록으로도 볼 수 있어요.');
-  await wait(5200);
+  cap('분기점을 지나면 「아까 하던 이야기 이어서 할게요」 뒤 끊긴 문장부터 다시 말합니다');
+  await wait(7000);
 
   cap('도착 15km 전, 지금 열리는 축제를 찾아 들를 곳을 제안합니다');
   stop('gyeryong', 'done'); stop('naejang', 'done');
@@ -587,6 +696,7 @@ document.querySelectorAll('.btn').forEach(b => b.onclick = () => {
   if (a === 'fact') return factDemo();
   if (a === 'auto') return scenario();
   if (a === 'live') return liveToggle();
+  if (a === 'sound') { SOUND = !SOUND; b.classList.toggle('on', SOUND); b.textContent = SOUND ? '소리 켬' : '소리 끔'; if (!SOUND) { try { speechSynthesis.cancel(); } catch (e) {} } return; }
   if (LIVE && b.classList.contains('sigbtn')) return;
   render();
 });

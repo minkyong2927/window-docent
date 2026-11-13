@@ -5,8 +5,10 @@ import com.windowdocent.core.DocentEngine
 import com.windowdocent.core.LatLng
 import com.windowdocent.core.LiveSignalSource
 import com.windowdocent.core.NavGuidance
+import com.windowdocent.core.Narrator
 import com.windowdocent.core.Poi
 import com.windowdocent.core.PrototypeSignalSource
+import com.windowdocent.core.Speaker
 import com.windowdocent.core.TurnSignal
 import org.json.JSONArray
 import org.json.JSONObject
@@ -14,6 +16,7 @@ import org.json.JSONObject
 /**
  * 프로토타입 화면(WebView) ↔ Kotlin 엔진 다리. 화면은 JSON 문자열만 주고받고, 판단은 전부 DocentEngine 이 함.
  * 화면에서는 window.Docent 로 보임: Docent.evaluate(...) · Docent.plan(...) · Docent.narrate(...) · Docent.live(...) · Docent.liveState(...)
+ *   · Docent.speak(...) · Docent.voiceState(...) · Docent.voiceStop(...)
  *
  * 신호는 기본이 화면의 시연용 신호 판(PrototypeSignalSource). 화면에서 「차량 신호」 를 켜면 실제 차량 신호(LiveSignalSource ·
  * 앱에서는 Pleos SDK 의 PleosSignalSource)로 바꾸고, 끄면 시연 신호로 돌아감.
@@ -21,14 +24,19 @@ import org.json.JSONObject
  * @param liveFactory 실제 차량 신호 공급원을 만드는 곳. 없으면 「차량 신호」 를 켤 수 없음
  * @param onLiveStart 실제 신호를 붙인 직후 (화면 쪽에서 위치 권한을 요청하는 등)
  * @param runner 공급원 붙이기 · 떼기를 어느 스레드에서 할지 (앱은 메인 스레드 · 테스트는 바로)
+ * @param speaker 해설을 소리로 내는 장치. 없으면 화면이 자기 방식(브라우저 음성)으로 말함
+ * @param speakerName 화면에 보일 말하는 장치 이름
  */
 class DocentBridge(
     private val engine: DocentEngine = DocentEngine(),
     private val liveFactory: (() -> LiveSignalSource)? = null,
     private val onLiveStart: (LiveSignalSource) -> Unit = {},
     private val runner: (() -> Unit) -> Unit = { it() },
+    speaker: Speaker? = null,
+    private val speakerName: () -> String = { "" },
 ) {
     private val source = PrototypeSignalSource()
+    private val narrator: Narrator? = speaker?.let { Narrator(it) }
     private var live: LiveSignalSource? = null
 
     @Volatile
@@ -51,6 +59,8 @@ class DocentBridge(
         if (liveOn && current != null) current.refresh() else source.push(state)
         engine.guestLanguage = state["lang"] as? String
         val d = engine.decide()
+        // 해설 방식이 바뀌면 말하던 해설을 멈추거나 이어 감
+        narrator?.onMode(d.mode)
         return JSONObject()
             .put("level", d.mode.level)
             .put("mode", d.mode.name)
@@ -123,10 +133,55 @@ class DocentBridge(
             .toString()
     }
 
-    /** 화면을 닫을 때 신호 공급원을 멈춤 */
+    /**
+     * 해설 한 편을 소리로 (문장마다 따로 말하고, 해설 방식에 따라 멈추고 이어 감).
+     * 입력 {"id","title","text" 또는 "sentences":[…],"lang"} · 출력은 voiceState 와 같음 (말하는 장치가 없으면 available false)
+     */
+    @JavascriptInterface
+    fun speak(requestJson: String): String {
+        val n = narrator ?: return voiceState("{}")
+        val req = toMap(JSONObject(requestJson))
+        val sentences = list(req["sentences"]).filterIsInstance<String>().ifEmpty { Narrator.split(req["text"] as? String ?: "") }
+        val id = req["id"] as? String ?: "story"
+        n.onMode(engine.decide().mode)
+        n.play(Narrator.Story(id, req["title"] as? String ?: id, sentences, req["lang"] as? String ?: "ko"))
+        return voiceState("{}")
+    }
+
+    /**
+     * 지금 해설을 어디까지 말했는지.
+     * 출력 {"available","device","id","title","state","index","total","speaking","error","lines":[{"t","cut","resume"}]}
+     */
+    @JavascriptInterface
+    fun voiceState(@Suppress("UNUSED_PARAMETER") requestJson: String): String {
+        val out = JSONObject().put("available", narrator != null).put("device", speakerName())
+        val s = narrator?.snapshot() ?: return out.toString()
+        val lines = JSONArray()
+        for (line in s.lines) lines.put(JSONObject().put("t", line.text).put("cut", line.cut).put("resume", line.resume))
+        return out
+            .put("id", s.storyId ?: JSONObject.NULL)
+            .put("title", s.title ?: JSONObject.NULL)
+            .put("state", s.state.name)
+            .put("index", s.index)
+            .put("total", s.total)
+            .put("speaking", s.speaking ?: JSONObject.NULL)
+            .put("error", s.error ?: JSONObject.NULL)
+            .put("lines", lines)
+            .toString()
+    }
+
+    /** 해설을 그만둠 */
+    @JavascriptInterface
+    fun voiceStop(@Suppress("UNUSED_PARAMETER") requestJson: String): String {
+        narrator?.stopAll()
+        return voiceState("{}")
+    }
+
+    /** 화면을 닫을 때 신호 공급원 · 말하는 장치를 멈춤 */
     fun close() {
         liveOn = false
         engine.detach()
+        narrator?.release()
     }
 
     /**

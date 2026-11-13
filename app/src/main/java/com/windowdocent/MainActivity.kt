@@ -12,6 +12,7 @@ import com.windowdocent.pleos.PleosSignalSource
 /**
  * 웹 프로토타입 화면을 띄우고, 판단은 Kotlin 엔진이 맡음.
  * 신호 -> DocentBridge(window.Docent) -> DocentEngine -> 해설 방식 · 청중 · 명소 순서 · 사실 검증 -> 화면.
+ * 해설은 Narrator 가 문장마다 소리로 냄 (Pleos TextToSpeech → 없으면 안드로이드 TTS · AppSpeaker).
  * 신호는 기본이 화면의 시연용 신호 판. 화면의 「차량 신호」 를 켜면 Pleos Connect SDK(PleosSignalSource)에서 받음.
  * Pleos 기기가 아니면 차량 신호가 붙지 않고 화면이 시연 신호로 돌아감.
  */
@@ -22,10 +23,13 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val voice = AppSpeaker(this)
         bridge = DocentBridge(
             liveFactory = { PleosSignalSource(this).also { live = it } },
             onLiveStart = ::askLocationIfNeeded,
             runner = { block -> runOnUiThread(block) },
+            speaker = voice,
+            speakerName = { voice.name },
         )
         val web = WebView(this)
         web.settings.javaScriptEnabled = true

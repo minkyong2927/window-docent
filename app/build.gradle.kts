@@ -11,8 +11,8 @@ android {
         applicationId = "com.windowdocent"
         minSdk = 29
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     // CI에서 만든 서명키를 환경변수로 받음. 없으면(로컬) debug 키로 서명.
@@ -49,10 +49,12 @@ android {
 }
 
 dependencies {
-    // Pleos Connect SDK: 차량 신호(방향지시등 · 조향각 · 브레이크 · 도어 · 좌석) · 내비 다음 안내 · 위치(속도 계산)
+    // Pleos Connect SDK: 차량 신호(방향지시등 · 조향각 · 브레이크 · 도어 · 좌석) · 내비 다음 안내 · 위치(속도 계산) · 음성 출력
     implementation("ai.pleos.playground:Vehicle:2.3.2")
     implementation("ai.pleos.playground:NaviHelper:3.0.5")
     implementation("ai.pleos.playground:FusedLocation:1.1.3")
+    // 해설을 소리로 (문장마다 · 일시정지가 없어 멈춤 · 이어 말하기는 Narrator 가 함)
+    implementation("ai.pleos.playground:TextToSpeech:3.3.1")
     // SDK 가 1.9 판 kotlin-reflect 를 끌어와서 우리 Kotlin 판에 맞춤 (공식 샘플과 같은 방식)
     implementation("org.jetbrains.kotlin:kotlin-reflect:2.1.0")
 
