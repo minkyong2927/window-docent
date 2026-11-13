@@ -8,6 +8,8 @@ import com.windowdocent.core.LiveSignalSource
 import com.windowdocent.core.NavGuidance
 import com.windowdocent.core.Narrator
 import com.windowdocent.core.NarrationSchedule
+import com.windowdocent.core.NarrationMode
+import com.windowdocent.core.ScheduleEntry
 import com.windowdocent.core.Poi
 import com.windowdocent.core.PrototypeSignalSource
 import com.windowdocent.core.RoutePoiPlanner
@@ -57,6 +59,10 @@ class DocentBridge(
     private var schedule: NarrationSchedule? = null
     private var scheduleRoute: List<LatLng> = emptyList()
     private var scheduleTexts: Map<String, String> = emptyMap()
+    /** 지나친 곳 한 줄 (기능 1 · 명소마다 passed) */
+    private var schedulePassed: Map<String, String> = emptyMap()
+    /** 아직 못 한 지나친 곳 한 줄 (말하는 중이라 미룸 · 지나서 PASSED_WITHIN_M 안에서만) */
+    private var pendingPassed: ScheduleEntry? = null
     private var schedulePois: List<Poi> = emptyList()
     private var scheduleAvgKmh = DEFAULT_SPEED_KMH
     private var departMs = 0L
@@ -256,6 +262,12 @@ class DocentBridge(
             val id = m["id"] as? String ?: return@mapNotNull null
             id to (m["text"] as? String ?: "")
         }.toMap()
+        schedulePassed = list(req["pois"]).mapNotNull { p ->
+            val m = p as? Map<*, *> ?: return@mapNotNull null
+            val id = m["id"] as? String ?: return@mapNotNull null
+            (m["passed"] as? String)?.takeIf { it.isNotBlank() }?.let { id to it }
+        }.toMap()
+        pendingPassed = null
         scheduleRoute = route
         schedulePois = pois
         scheduleAvgKmh = (req["avgSpeedKmh"] as? Number)?.toDouble() ?: DEFAULT_SPEED_KMH
@@ -304,7 +316,30 @@ class DocentBridge(
             else start = JSONObject().put("id", e.id).put("name", e.name).put("text", scheduleTexts[e.id].orEmpty())
         }
         for (e in tick.missed) narrator?.miss(Narrator.Story(e.id, e.name, Narrator.split(scheduleTexts[e.id].orEmpty())))
-        return scheduleView(speedKmh).put("start", start ?: JSONObject.NULL).toString()
+        // 기능 1 · 지나친 곳은 지난 뒤 짧게: 해설을 시작 못 하고 지나친 곳은 말하는 중이 아니면 한 줄 요약을 바로 말함.
+        // 바쁘면(말하는 중 · 멈춤 · 물음 중) 지나서 3km 안에서 비는 때로 미룸. 자세한 이야기는 못 한 이야기에 그대로 남음
+        tick.missed.lastOrNull { schedulePassed[it.id] != null }?.let { pendingPassed = it }
+        var passed: JSONObject? = null
+        val p = pendingPassed
+        if (tick.start != null) {
+            pendingPassed = null
+        } else if (p != null && travelledM - p.alongM > PASSED_WITHIN_M) {
+            pendingPassed = null
+        } else if (p != null && passedFree()) {
+            pendingPassed = null
+            val line = schedulePassed.getValue(p.id)
+            val n = narrator
+            if (n != null) n.play(Narrator.Story(p.id + PASSED_SUFFIX, p.name, listOf(line)))
+            else passed = JSONObject().put("id", p.id).put("name", p.name).put("text", line)
+        }
+        return scheduleView(speedKmh).put("start", start ?: JSONObject.NULL).put("passed", passed ?: JSONObject.NULL).toString()
+    }
+
+    /** 지나친 곳 한 줄을 지금 말해도 되는지: 말하는 장치가 쉬고(아무것도 안 하거나 다 말함 · 물음 중 아님) 멈춤 방식이 아님 */
+    private fun passedFree(): Boolean {
+        if (engine.decide().mode == NarrationMode.HOLD) return false
+        val s = narrator?.snapshot() ?: return true
+        return (s.state == Narrator.State.IDLE || s.state == Narrator.State.DONE) && !s.awaitingAnswer
     }
 
     private fun scheduleView(speedKmh: Double? = null): JSONObject {
@@ -461,6 +496,10 @@ class DocentBridge(
 
     private companion object {
         const val DEFAULT_SPEED_KMH = 80.0
+        /** 지나친 곳 한 줄은 그곳을 지나 이 거리 안에서만 (m) */
+        const val PASSED_WITHIN_M = 3000.0
+        /** 지나친 곳 한 줄의 이야기 id 꼬리 (자세한 이야기와 구분) */
+        const val PASSED_SUFFIX = ":passed"
 
         fun poisOf(v: Any?): List<Poi> = list(v).mapNotNull { p ->
             val m = p as? Map<*, *> ?: return@mapNotNull null

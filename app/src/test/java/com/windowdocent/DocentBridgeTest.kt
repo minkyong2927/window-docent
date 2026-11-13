@@ -519,4 +519,50 @@ class DocentBridgeTest {
         assertEquals("SecurityException", v.getJSONObject("heard").getString("error"))
         bridge.close()
     }
+
+    // ── 지나친 곳은 지난 뒤 짧게 (기능 1 · 마-1) ─────────────────────────────────────
+    private fun scheduleWithPassed(): JSONObject {
+        val req = demoScheduleRequest()
+        val pois = req.getJSONArray("pois")
+        for (i in 0 until pois.length()) pois.getJSONObject(i).let { it.put("passed", "방금 지난 " + it.getString("name") + "이에요.") }
+        return req
+    }
+
+    @Test fun passedPlaceGetsOneLineRightAwayWhenFree() {
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker)
+        bridge.evaluate(state())
+        bridge.schedule(scheduleWithPassed().toString())
+        bridge.progress("""{"travelledM":75200,"speedKmh":90}""")      // 천안삼거리 해설
+        speaker.finish(); speaker.finish()                                  // 다 말함
+        val r = JSONObject(bridge.progress("""{"travelledM":125000,"speedKmh":90}"""))   // 계룡산을 시작 못 하고 지나침
+        assertEquals("ko:방금 지난 계룡산이에요.", speaker.said.last())
+        assertEquals("MISSED", r.getJSONArray("entries").getJSONObject(1).getString("status"))   // 자세한 이야기는 못 한 이야기에
+        assertEquals("gyeryong", JSONObject(bridge.voiceState("{}")).getJSONArray("missed").getJSONObject(0).getString("id"))
+    }
+
+    @Test fun passedLineWaitsWhileSpeakingThenSaysItWithin3km() {
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker)
+        bridge.evaluate(state())
+        bridge.schedule(scheduleWithPassed().toString())
+        bridge.progress("""{"travelledM":75200,"speedKmh":90}""")      // 천안삼거리 말하는 중
+        bridge.progress("""{"travelledM":124500,"speedKmh":90}""")     // 계룡산을 지나침 · 바빠서 미룸
+        assertEquals("ko:첫 문장이에요.", speaker.said.last())
+        speaker.finish(); speaker.finish()
+        bridge.progress("""{"travelledM":126000,"speedKmh":90}""")     // 지나서 2km · 이제 한 줄
+        assertEquals("ko:방금 지난 계룡산이에요.", speaker.said.last())
+    }
+
+    @Test fun passedLineIsDroppedMoreThan3kmLater() {
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker)
+        bridge.evaluate(state())
+        bridge.schedule(scheduleWithPassed().toString())
+        bridge.progress("""{"travelledM":75200,"speedKmh":90}""")
+        bridge.progress("""{"travelledM":124500,"speedKmh":90}""")
+        speaker.finish(); speaker.finish()
+        bridge.progress("""{"travelledM":127500,"speedKmh":90}""")     // 지나서 3km 넘음
+        assertEquals("ko:둘째 문장이에요.", speaker.said.last())
+    }
 }

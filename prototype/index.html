@@ -292,13 +292,15 @@
 <script>
 (function(){
   const base = location.href.indexOf('/android_asset/') >= 0 ? '' : '../sample-data/';
-  ['scenario-a.js'].forEach(f => document.write('<script src="' + base + f + '"><\/script>'));
+  ['scenario-a.js', 'stories.js'].forEach(f => document.write('<script src="' + base + f + '"><\/script>'));
 })();
 </script>
 
 <script>
 const $ = id => document.getElementById(id);
 const DEMO = window.DEMO_DATA;   // sample-data/scenario-a.js
+const STORIES = window.SAMPLE_STORIES || {};   // sample-data/stories.js (임의 자료)
+function passedOf(id){ return (STORIES.passed || {})[id] || ''; }
 
 // 앱(WebView)에서는 window.Docent 가 Kotlin 엔진(DocentBridge)이다.
 // 브라우저에는 없으므로 아래 JS 가 같은 규칙으로 대신한다 (decideLocal · guardLocal · DEMO.plan).
@@ -478,7 +480,7 @@ function departNow(){ const m = /(\d+):(\d+)/.exec($('clock').textContent || '')
 function makeSchedule(list){
   SCHED.avg = DEMO.avgSpeedKmh; SCHED.depart = departNow(); SCHED.travelled = 0; SCHED.started = {}; SCHED.reported = {};
   if (BRIDGE && BRIDGE.schedule) {
-    const pois = DEMO.pois.filter(p => VIA || !p.viaOnly).map(p => ({ id:p.id, name:p.name, lat:p.lat, lng:p.lng, priority:p.priority, visibleM:p.visibleM, text:p.text || '' }));
+    const pois = DEMO.pois.filter(p => VIA || !p.viaOnly).map(p => ({ id:p.id, name:p.name, lat:p.lat, lng:p.lng, priority:p.priority, visibleM:p.visibleM, text:p.text || '', passed:passedOf(p.id) }));
     SCHED.view = callEngine('schedule', { route: VIA ? DEMO.routeVia : DEMO.route, pois, avgSpeedKmh: DEMO.avgSpeedKmh, departMs: SCHED.depart });
     if (SCHED.view) return;
   }
@@ -494,10 +496,12 @@ function schedStatus(e, t){
 }
 function schedSecs(e, t, kmh){ const v = ((kmh !== null && kmh !== undefined && kmh >= 5) ? kmh : SCHED.avg) / 3.6; return Math.max(0, (e.startM - t) / v); }
 // 차가 나아갈 때마다: 앱은 Kotlin(Docent.progress · 시작은 Kotlin 이 말함), 브라우저는 같은 규칙으로 판단해 그 해설을 말함
+const PASSED_WITHIN_M = 3000;   // 지나친 곳 한 줄은 그곳을 지나 3km 안에서만
 function schedProgress(t, kmh){
   if (BRIDGE && BRIDGE.progress && SCHED.view) {
     SCHED.view = callEngine('progress', { travelledM:t, speedKmh:kmh }) || SCHED.view;
     if (SCHED.view.start) doc(SCHED.view.start.text, false, SCHED.view.start.id);
+    else if (SCHED.view.passed) doc(SCHED.view.passed.text, false, SCHED.view.passed.id + ':passed');
     else if (VOICE.app) { const sp = SCHED.view.entries.find(e => e.status === 'SPEAKING'); if (sp && $('db').classList.contains('hidden')) $('db').classList.remove('hidden'); }
     return;
   }
@@ -505,9 +509,15 @@ function schedProgress(t, kmh){
   const due = SCHED.entries.filter(e => schedStatus(e, t) === 'DUE'), start = due[due.length - 1];
   for (const e of SCHED.entries) {
     if (SCHED.started[e.id] || SCHED.reported[e.id]) continue;
-    if ((due.indexOf(e) >= 0 && e !== start) || schedStatus(e, t) === 'PASSED') { SCHED.reported[e.id] = 1; NARR.miss({ id:e.id, title:e.name, sentences:splitSentences(textOf(e.id)), lang:'ko' }); }
+    if ((due.indexOf(e) >= 0 && e !== start) || schedStatus(e, t) === 'PASSED') {
+      SCHED.reported[e.id] = 1; NARR.miss({ id:e.id, title:e.name, sentences:splitSentences(textOf(e.id)), lang:'ko' });
+      if (passedOf(e.id)) SCHED.passed = e;   // 지나친 곳 한 줄 (Kotlin DocentBridge.progress 와 같은 규칙)
+    }
   }
-  if (start) { SCHED.started[start.id] = 1; doc(textOf(start.id), false, start.id); }
+  if (start) { SCHED.started[start.id] = 1; SCHED.passed = null; doc(textOf(start.id), false, start.id); return; }
+  const p = SCHED.passed, v = voiceState();
+  if (p && t - p.alongM > PASSED_WITHIN_M) SCHED.passed = null;
+  else if (p && (v.state === 'IDLE' || v.state === 'DONE') && !v.awaiting && decideLocal().mode !== 'HOLD') { SCHED.passed = null; doc(passedOf(p.id), false, p.id + ':passed'); }
 }
 // 예정표 한 벌 (앱이면 Kotlin 이 준 것, 아니면 위 규칙과 지금 해설 상태로)
 function schedView(kmh){

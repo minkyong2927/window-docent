@@ -30,7 +30,7 @@ gradle :app:assembleRelease
 | 가속 | WHPX |
 | 도구 | adb 37.0.1, 에뮬레이터 37.2.13, 가상 콘솔 |
 | 빌드 | GitHub Actions, JDK 17 |
-| 단위 테스트 | JVM 에서 153개, 차량 없이 돎 |
+| 단위 테스트 | JVM 에서 156개, 차량 없이 돎 |
 
 ## 3. 필요한 설정
 
@@ -81,6 +81,7 @@ gradle :app:assembleRelease
 | 2 음성 해설, 멈추고 이어 말하기 | 완료, 에뮬레이터 확인 | Narrator.kt 외 2 |
 | 2 보강 위험 구간, 못 한 이야기 | 완료, 거리 단위 확인 전 | CautionZone.kt |
 | 3 가까워지면 해설, 예정 보이기 | 완료 | NarrationSchedule.kt |
+| 기능 1 지나친 곳은 지난 뒤 한 줄 | 완료 | DocentBridge.kt |
 | 4 음성 명령, 다시 말하기 | 완료, 마이크 확인 전 | VoiceCommand.kt 외 1 |
 | 5 ~ 8 경유지, 퀴즈, 기록과 QR, 외국어 | 진행 중 | |
 
@@ -99,6 +100,7 @@ gradle :app:assembleRelease
 | 파일 | 개수 | 기준 | 실제 서비스에서 |
 |---|---|---|---|
 | sample-data/scenario-a.js | 경로 2, 명소 7 | 기획안 시나리오 A | 내비 경로, TourAPI |
+| sample-data/stories.js | 지나친 곳 한 줄 3 | 시나리오 A 명소 셋, 사실 숫자 없음 | TourAPI 소개글 |
 
 - 공모전이 주지 않는 자료만 임의로 씀
 - 화면에도 시연 자료라고 적음
