@@ -65,6 +65,8 @@ class DocentBridge(
     private var schedule: NarrationSchedule? = null
     private var scheduleRoute: List<LatLng> = emptyList()
     private var scheduleTexts: Map<String, String> = emptyMap()
+    /** 외국어 해설 (기능 4 · 명소마다 foreign {언어: 글, phrase: {ko, roman, 언어: 뜻}}) */
+    private var scheduleForeign: Map<String, Map<*, *>> = emptyMap()
     /** 지나친 곳 한 줄 (기능 1 · 명소마다 passed) */
     private var schedulePassed: Map<String, String> = emptyMap()
     /** 아직 못 한 지나친 곳 한 줄 (말하는 중이라 미룸 · 지나서 PASSED_WITHIN_M 안에서만) */
@@ -300,6 +302,11 @@ class DocentBridge(
             (m["passed"] as? String)?.takeIf { it.isNotBlank() }?.let { id to it }
         }.toMap()
         pendingPassed = null
+        scheduleForeign = list(req["pois"]).mapNotNull { p ->
+            val m = p as? Map<*, *> ?: return@mapNotNull null
+            val id = m["id"] as? String ?: return@mapNotNull null
+            (m["foreign"] as? Map<*, *>)?.let { id to it }
+        }.toMap()
         scheduleRoute = route
         schedulePois = pois
         scheduleAvgKmh = (req["avgSpeedKmh"] as? Number)?.toDouble() ?: DEFAULT_SPEED_KMH
@@ -342,7 +349,7 @@ class DocentBridge(
         val tick = sch.tick(travelledM)
         var start: JSONObject? = null
         tick.start?.let { e ->
-            val story = Narrator.Story(e.id, e.name, Narrator.split(scheduleTexts[e.id].orEmpty()))
+            val story = storyFor(e.id, e.name)
             trip.heard(e.id, e.name)
             val n = narrator
             if (n != null) n.play(story)
@@ -366,6 +373,17 @@ class DocentBridge(
             else passed = JSONObject().put("id", p.id).put("name", p.name).put("text", line)
         }
         return scheduleView(speedKmh).put("start", start ?: JSONObject.NULL).put("passed", passed ?: JSONObject.NULL).toString()
+    }
+
+    /** 해설 한 편: 외국어 승객이면 그 언어 글 + 한국어 한마디(기능 4), 아니면 한국어 글 */
+    private fun storyFor(id: String, name: String): Narrator.Story {
+        val lang = engine.decide().language
+        val f = scheduleForeign[id]
+        val text = f?.get(lang) as? String
+        if (lang != "ko" && !text.isNullOrBlank()) {
+            return Narrator.Story(id, name, Narrator.split(text) + listOfNotNull(phraseLine(f["phrase"] as? Map<*, *>, lang)), lang)
+        }
+        return Narrator.Story(id, name, Narrator.split(scheduleTexts[id].orEmpty()))
     }
 
     /** 지나친 곳 한 줄을 지금 말해도 되는지: 말하는 장치가 쉬고(아무것도 안 하거나 다 말함 · 물음 중 아님) 멈춤 방식이 아님 */
@@ -613,6 +631,14 @@ class DocentBridge(
         const val SUGGEST_SUFFIX = ":suggest"
         /** 퀴즈 문제의 이야기 id 꼬리 */
         const val QUIZ_SUFFIX = ":quiz"
+
+        /** 한국어 한마디 한 문장 (승객 언어로 뜻을 붙임) */
+        fun phraseLine(p: Map<*, *>?, lang: String): String? {
+            val ko = p?.get("ko") as? String ?: return null
+            val roman = p["roman"] as? String ?: return null
+            val meaning = p[lang] as? String ?: return null
+            return if (lang == "es") "Palabra coreana: $ko, $roman, significa $meaning." else "Korean word: $ko, $roman, means $meaning."
+        }
 
         fun poisOf(v: Any?): List<Poi> = list(v).mapNotNull { p ->
             val m = p as? Map<*, *> ?: return@mapNotNull null

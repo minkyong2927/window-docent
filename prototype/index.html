@@ -289,6 +289,16 @@
 const $ = id => document.getElementById(id);
 const DEMO = window.DEMO_DATA;   // sample-data/scenario-a.js
 const STORIES = window.SAMPLE_STORIES || {};   // sample-data/stories.js (임의 자료)
+// 외국어 승객이면 그 언어 해설 + 한국어 한마디 (Kotlin DocentBridge.storyFor 와 같은 규칙)
+function phraseLine(p, lang){
+  if (!p || !p.ko || !p.roman || !p[lang]) return '';
+  return lang === 'es' ? 'Palabra coreana: ' + p.ko + ', ' + p.roman + ', significa ' + p[lang] + '.' : 'Korean word: ' + p.ko + ', ' + p.roman + ', means ' + p[lang] + '.';
+}
+function storyOf(id){
+  const lang = decideLocal().language, f = (STORIES.foreign || {})[id];
+  if (lang !== 'ko' && f && f[lang]) return { text: f[lang] + ' ' + phraseLine(f.phrase, lang), lang };
+  return { text: textOf(id), lang: 'ko' };
+}
 function passedOf(id){ return (STORIES.passed || {})[id] || ''; }
 
 // 앱(WebView)에서는 window.Docent 가 Kotlin 엔진(DocentBridge)이다.
@@ -527,7 +537,7 @@ function departNow(){ const m = /(\d+):(\d+)/.exec($('clock').textContent || '')
 function makeSchedule(list){
   SCHED.avg = DEMO.avgSpeedKmh; SCHED.depart = departNow(); SCHED.travelled = 0; SCHED.started = {}; SCHED.reported = {};
   if (BRIDGE && BRIDGE.schedule) {
-    const pois = DEMO.pois.filter(p => VIA || !p.viaOnly).map(p => ({ id:p.id, name:p.name, lat:p.lat, lng:p.lng, priority:p.priority, visibleM:p.visibleM, text:p.text || '', passed:passedOf(p.id) }));
+    const pois = DEMO.pois.filter(p => VIA || !p.viaOnly).map(p => ({ id:p.id, name:p.name, lat:p.lat, lng:p.lng, priority:p.priority, visibleM:p.visibleM, text:p.text || '', passed:passedOf(p.id), foreign:(STORIES.foreign || {})[p.id] || null }));
     SCHED.view = callEngine('schedule', { route: VIA ? DEMO.routeVia : DEMO.route, pois, avgSpeedKmh: DEMO.avgSpeedKmh, departMs: SCHED.depart });
     if (SCHED.view) return;
   }
@@ -561,7 +571,7 @@ function schedProgress(t, kmh){
       if (passedOf(e.id)) SCHED.passed = e;   // 지나친 곳 한 줄 (Kotlin DocentBridge.progress 와 같은 규칙)
     }
   }
-  if (start) { SCHED.started[start.id] = 1; SCHED.passed = null; doc(textOf(start.id), false, start.id); return; }
+  if (start) { SCHED.started[start.id] = 1; SCHED.passed = null; const so = storyOf(start.id); doc(so.text, false, start.id, so.lang); return; }
   const p = SCHED.passed, v = voiceState();
   if (p && t - p.alongM > PASSED_WITHIN_M) SCHED.passed = null;
   else if (p && (v.state === 'IDLE' || v.state === 'DONE') && !v.awaiting && decideLocal().mode !== 'HOLD') { SCHED.passed = null; doc(passedOf(p.id), false, p.id + ':passed'); }
@@ -842,11 +852,11 @@ function voiceSay(){
 }
 function voiceState(){ if (VOICE.app) return callEngine('voiceState', {}) || { lines:[] }; NARR.tick(); return NARR.snapshot(); }
 
-function doc(text, quiz=false, id=null){
+function doc(text, quiz=false, id=null, lang='ko'){
   if (id && id.indexOf(':') < 0 && !VOICE.app) LREC.heard[id] = nameOf(id);
   $('db').classList.remove('hidden');
   VOICE.nextQuiz = quiz; VOICE.quiz = quiz; VOICE.seen = [];
-  const story = { id: id || ('d' + (++VOICE.seq)), title: id ? nameOf(id) : quiz ? '퀴즈' : '해설', sentences: splitSentences(text), lang:'ko' };
+  const story = { id: id || ('d' + (++VOICE.seq)), title: id ? nameOf(id) : quiz ? '퀴즈' : '해설', sentences: splitSentences(text), lang };
   if (VOICE.app) callEngine('speak', story); else NARR.play(story);
   voiceTick();
 }

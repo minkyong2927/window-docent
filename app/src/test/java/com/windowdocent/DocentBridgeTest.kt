@@ -650,4 +650,34 @@ class DocentBridgeTest {
         assertEquals(1, r.getInt("holds"))
         assertEquals(r.toString(), JSONObject(bridge.record("{}")).toString())
     }
+
+    // ── 외국어 승객 해설과 한국어 한마디 (기능 4 · 마-4) ─────────────────────────────────
+    private fun scheduleWithForeign(): JSONObject {
+        val req = demoScheduleRequest()
+        val pois = req.getJSONArray("pois")
+        for (i in 0 until pois.length()) if (pois.getJSONObject(i).getString("id") == "cheonan") {
+            pois.getJSONObject(i).put("foreign", JSONObject("""{"en":"We are passing Cheonan Samgeori.","es":"Pasamos por Cheonan Samgeori.","phrase":{"ko":"안녕하세요","roman":"annyeonghaseyo","en":"hello","es":"hola"}}"""))
+        }
+        return req
+    }
+
+    @Test fun foreignGuestHearsTheStoryInTheirLanguageThenAKoreanWord() {
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker)
+        bridge.evaluate(state().replace("\"lang\":\"ko\"", "\"lang\":\"es\""))
+        bridge.schedule(scheduleWithForeign().toString())
+        bridge.progress("""{"travelledM":75200,"speedKmh":90}""")
+        assertEquals("es:Pasamos por Cheonan Samgeori.", speaker.said.last())
+        speaker.finish()
+        assertEquals("es:Palabra coreana: 안녕하세요, annyeonghaseyo, significa hola.", speaker.said.last())
+    }
+
+    @Test fun koreanPassengersStillHearTheKoreanStory() {
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker)
+        bridge.evaluate(state())
+        bridge.schedule(scheduleWithForeign().toString())
+        bridge.progress("""{"travelledM":75200,"speedKmh":90}""")
+        assertEquals("ko:첫 문장이에요.", speaker.said.last())
+    }
 }

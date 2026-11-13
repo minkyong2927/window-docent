@@ -14,6 +14,19 @@ window.SAMPLE_STORIES = {
     gyeryong: { question: '계룡산 이름에 숨어 있는 동물 두 마리는 뭘까요?', must: ['닭', '용'], right: '정답이에요! 닭 계, 용 룡. 1점!', wrong: '아쉬워요. 정답은 닭과 용이에요.' },
     naejang: { question: '내장산은 어느 계절에 가장 유명할까요?', must: ['가을'], right: '정답이에요! 가을 단풍이에요. 1점!', wrong: '아쉬워요. 정답은 가을이에요.' }
   },
+  // 기능 4 · 외국어 승객 해설 (3곳, 영어 · 스페인어) 과 한국어 한마디 (3개)
+  // 기준: 지나친 곳 한 줄과 같은 명소 셋을 같은 내용으로 옮김(사실 숫자 없음), 한마디는 여행에서 바로 쓰는 인사 · 감사 · 맛 표현
+  foreign: {
+    cheonan: { en: 'We are passing Cheonan Samgeori. It is known for an old folk song about weeping willows.',
+               es: 'Pasamos por Cheonan Samgeori. Es conocido por una antigua canción popular sobre los sauces llorones.',
+               phrase: { ko: '안녕하세요', roman: 'annyeonghaseyo', en: 'hello', es: 'hola' } },
+    gyeryong: { en: 'Gyeryongsan is coming up. People say its ridge looks like a dragon wearing a rooster crest.',
+                es: 'Se acerca Gyeryongsan. Dicen que su cresta parece un dragón con cresta de gallo.',
+                phrase: { ko: '감사합니다', roman: 'gamsahamnida', en: 'thank you', es: 'gracias' } },
+    naejang: { en: 'We are near Naejangsan. It is a mountain famous for its autumn leaves.',
+               es: 'Estamos cerca de Naejangsan. Es una montaña famosa por sus hojas de otoño.',
+               phrase: { ko: '맛있어요', roman: 'masisseoyo', en: 'it is delicious', es: 'está delicioso' } }
+  },
   // 기능 2 · 들러볼 곳 (행사 중인 곳 1곳) · 기준: 기획안 시나리오 A 의 들러볼 곳(담양 죽녹원 대나무축제), 경로에서 몇 분인지는 시연 경로 값
   events: {
     juknok: { what: '대나무축제', away: '3분', text: '지금 담양은 대나무축제 기간이에요. 죽녹원은 가는 길에서 3분이면 들를 수 있어요. 들러 갈까요?' }
