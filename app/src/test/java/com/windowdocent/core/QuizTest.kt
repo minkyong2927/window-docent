@@ -34,5 +34,15 @@ class QuizTest {
         assertEquals(2, book.asked)
         assertEquals(1, book.right)
         assertEquals(mapOf("gyeryong" to false), book.results.toMap())
+        book.ask(gyeryong)
+        book.cancel()                                    // 답 없이 버린 문제는 채점하지 않음
+        assertNull(book.answer("닭이랑 용"))
+    }
+
+    @Test fun alternativesInOneWord() {
+        val q = QuizItem("naejang", "In which season is Naejangsan most famous?", listOf("autumn|fall"), "", "")
+        assertTrue(QuizBook.judge(q, "In the fall!"))
+        assertTrue(QuizBook.judge(q, "Autumn"))
+        assertFalse(QuizBook.judge(q, "summer"))
     }
 }

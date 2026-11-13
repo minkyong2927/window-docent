@@ -680,4 +680,30 @@ class DocentBridgeTest {
         bridge.progress("""{"travelledM":75200,"speedKmh":90}""")
         assertEquals("ko:첫 문장이에요.", speaker.said.last())
     }
+
+    // ── 학습 모드 (기능 5 · 마-5) ─────────────────────────────────────────────────────
+    @Test fun learnModeNarratesInTheStudyLanguageThenAsksAReviewQuiz() {
+        val speaker = FakeSpeaker()
+        val ears = FakeEars()
+        val bridge = DocentBridge(speaker = speaker, voiceInput = ears)
+        bridge.evaluate(state())
+        val req = scheduleWithForeign()
+        val pois = req.getJSONArray("pois")
+        for (i in 0 until pois.length()) if (pois.getJSONObject(i).getString("id") == "cheonan") {
+            pois.getJSONObject(i).put("learn", JSONObject("""{"en":{"question":"What tree is in the song?","must":["willow"],"right":"Correct!","wrong":"Good try."}}"""))
+        }
+        bridge.schedule(req.toString())
+        bridge.learn("""{"lang":"en"}""")
+        bridge.progress("""{"travelledM":75200,"speedKmh":90}""")
+        assertEquals("en:We are passing Cheonan Samgeori.", speaker.said.last())   // 같은 해설을 영어로 (한국어 한마디 없음)
+        speaker.finish()
+        bridge.voiceState("{}")                                       // 해설이 끝나면 복습 퀴즈
+        assertEquals("en:What tree is in the song?", speaker.said.last())
+        ears.next = "a weeping willow"
+        speaker.finish()
+        val v = JSONObject(bridge.voiceState("{}"))
+        assertTrue(v.getJSONObject("heard").getJSONObject("quiz").getBoolean("ok"))
+        assertEquals("en:Correct!", speaker.said.last())
+        bridge.learn("""{"lang":null}""")
+    }
 }

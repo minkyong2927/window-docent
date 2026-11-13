@@ -262,6 +262,7 @@
       <button class="btn" data-a="drive" id="btnDrive">주행 흉내</button>
       <button class="btn" data-a="live" id="btnLive">차량 신호</button>
       <button class="btn on" data-a="sound" id="btnSound">소리 켬</button>
+      <button class="btn" data-a="learn" id="btnLearn" title="학습 모드 · 같은 해설을 공부할 언어로 듣고 곳마다 복습 퀴즈">학습 모드</button>
       <button class="btn" data-a="say" title="음성 명령 듣기 · 앱(Pleos 기기)에서만 Pleos SpeechToText">🎤 말하기</button>
       <button class="btn" data-a="again" title="음성 명령 흉내 · 다시 말해 줘">🎤 다시</button>
       <button class="btn ans" data-a="yes" title="음성 명령 흉내 · 응, 들려줘">🎤 응</button>
@@ -301,6 +302,7 @@ function phraseLine(p, lang){
 function storyOf(id){
   const lang = decideLocal().language, f = (STORIES.foreign || {})[id];
   if (lang !== 'ko' && f && f[lang]) return { text: f[lang] + ' ' + phraseLine(f.phrase, lang), lang };
+  if (lang === 'ko' && S.learn && f && f[S.learn]) { LEARN.heard[id] = 1; return { text: f[S.learn], lang: S.learn }; }   // 학습 모드 (기능 5)
   return { text: textOf(id), lang: 'ko' };
 }
 function passedOf(id){ return (STORIES.passed || {})[id] || ''; }
@@ -514,6 +516,23 @@ function recordText(r){
 // 가족 퀴즈 (기능 3). 앱이면 Kotlin QuizBook 이 채점, 브라우저는 같은 규칙(답에 꼭 들어야 하는 낱말 모두)
 const LQUIZ = { current:null, asked:0, right:0 };
 function quizNorm(s){ return String(s).toLowerCase().replace(/[\s.,!?~·'"()\-]/g, ''); }
+// 학습 모드 (기능 5): 같은 해설을 공부할 언어로, 곳 해설이 끝나면 그 언어로 복습 퀴즈 (Kotlin DocentBridge.askLearnReview 와 같은 규칙)
+const LEARN = { asked:{}, heard:{} };
+const LEARN_NAME = { en:'English', es:'Español' };
+function learnToggle(){
+  S.learn = !S.learn ? 'en' : S.learn === 'en' ? 'es' : null; LEARN.asked = {}; LEARN.heard = {};
+  if (VOICE.app && BRIDGE && BRIDGE.learn) callEngine('learn', { lang: S.learn });
+  $('btnLearn').textContent = S.learn ? '학습 · ' + LEARN_NAME[S.learn] : '학습 모드';
+  $('btnLearn').classList.toggle('on', !!S.learn);
+  cap(S.learn ? '학습 모드 · 해설을 ' + LEARN_NAME[S.learn] + ' 로 듣고, 곳마다 그 언어로 복습 퀴즈' : '학습 모드를 껐습니다');
+}
+function learnReview(v){
+  if (VOICE.app || !S.learn || v.state !== 'DONE' || !v.id || !LEARN.heard[v.id] || LEARN.asked[v.id] || LQUIZ.current) return;
+  const q = ((STORIES.learn || {})[v.id] || {})[S.learn]; if (!q) return;
+  LEARN.asked[v.id] = 1;
+  LQUIZ.current = Object.assign({ id: v.id, lang: S.learn }, q); LQUIZ.asked++; quizScore();
+  doc(q.question, true, v.id + ':quiz', S.learn);
+}
 function askQuiz(id){
   const q = (STORIES.quiz || {})[id]; if (!q) return false;
   const item = Object.assign({ id }, q);
@@ -553,7 +572,7 @@ function departNow(){ const m = /(\d+):(\d+)/.exec($('clock').textContent || '')
 function makeSchedule(list){
   SCHED.avg = DEMO.avgSpeedKmh; SCHED.depart = departNow(); SCHED.travelled = 0; SCHED.started = {}; SCHED.reported = {};
   if (BRIDGE && BRIDGE.schedule) {
-    const pois = DEMO.pois.filter(p => VIA || !p.viaOnly).map(p => ({ id:p.id, name:p.name, lat:p.lat, lng:p.lng, priority:p.priority, visibleM:p.visibleM, text:p.text || '', passed:passedOf(p.id), foreign:(STORIES.foreign || {})[p.id] || null }));
+    const pois = DEMO.pois.filter(p => VIA || !p.viaOnly).map(p => ({ id:p.id, name:p.name, lat:p.lat, lng:p.lng, priority:p.priority, visibleM:p.visibleM, text:p.text || '', passed:passedOf(p.id), foreign:(STORIES.foreign || {})[p.id] || null, learn:(STORIES.learn || {})[p.id] || null }));
     SCHED.view = callEngine('schedule', { route: VIA ? DEMO.routeVia : DEMO.route, pois, avgSpeedKmh: DEMO.avgSpeedKmh, departMs: SCHED.depart });
     if (SCHED.view) return;
   }
@@ -587,7 +606,7 @@ function schedProgress(t, kmh){
       if (passedOf(e.id)) SCHED.passed = e;   // 지나친 곳 한 줄 (Kotlin DocentBridge.progress 와 같은 규칙)
     }
   }
-  if (start) { SCHED.started[start.id] = 1; SCHED.passed = null; const so = storyOf(start.id); doc(so.text, false, start.id, so.lang); return; }
+  if (start) { SCHED.started[start.id] = 1; SCHED.passed = null; LQUIZ.current = null; const so = storyOf(start.id); doc(so.text, false, start.id, so.lang); return; }
   const p = SCHED.passed, v = voiceState();
   if (p && t - p.alongM > PASSED_WITHIN_M) SCHED.passed = null;
   else if (p && (v.state === 'IDLE' || v.state === 'DONE') && !v.awaiting && decideLocal().mode !== 'HOLD') { SCHED.passed = null; doc(passedOf(p.id), false, p.id + ':passed'); }
@@ -838,11 +857,11 @@ function voiceCommand(text){
   if (VOICE.app) { const v = callEngine('command', { text }) || {}; heard = v.heard; wp = v.waypoint; }
   else if (LQUIZ.current && parseCommand(text) !== 'REPEAT') {
     const q = LQUIZ.current; LQUIZ.current = null;
-    const ok = q.must.length > 0 && q.must.every(w => quizNorm(text).indexOf(quizNorm(w)) >= 0);
+    const ok = q.must.length > 0 && q.must.every(w => String(w).split('|').some(a => quizNorm(text).indexOf(quizNorm(a)) >= 0));
     if (ok) LQUIZ.right++;
     (LQUIZ.results = LQUIZ.results || {})[q.id] = ok;
     heard = { text, command:'ANSWER', done:true, quiz:{ id:q.id, ok, line: ok ? q.right : q.wrong } };
-    doc(heard.quiz.line, false, q.id + ':quiz:a');
+    doc(heard.quiz.line, false, q.id + ':quiz:a', q.lang || 'ko');
   }
   else {
     const command = parseCommand(text);
@@ -879,6 +898,7 @@ function doc(text, quiz=false, id=null, lang='ko'){
 // 말한 줄을 화면에: 앞 줄은 다, 지금 줄은 말하는 만큼(글자당 45ms), 끊긴 줄은 끊긴 데까지 + ' —'
 function voiceTick(){
   const v = voiceState(), lines = v.lines || [], now = Date.now();
+  learnReview(v);
   document.body.classList.toggle('ask', !!v.awaiting);
   if (v.heard && v.heard.atMs && v.heard.atMs !== VOICE.heardAt) showHeard(v.heard, v.waypoint);
   if (v.id && (v.id === 'offer' || v.id === 'missed')) $('db').classList.remove('hidden');   // 도착 · 정차 때 제안은 해설 글 상자에
@@ -1006,6 +1026,7 @@ document.querySelectorAll('.btn').forEach(b => b.onclick = () => {
   if (a === 'fact') return factDemo();
   if (a === 'auto') return scenario();
   if (a === 'live') return liveToggle();
+  if (a === 'learn') return learnToggle();
   if (a === 'drive') return driveToggle();
   if (a === 'sound') { SOUND = !SOUND; b.classList.toggle('on', SOUND); b.textContent = SOUND ? '소리 켬' : '소리 끔'; if (!SOUND) { try { speechSynthesis.cancel(); } catch (e) {} } return; }
   if (LIVE && b.classList.contains('sigbtn')) return;

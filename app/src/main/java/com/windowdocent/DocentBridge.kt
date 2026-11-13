@@ -65,6 +65,12 @@ class DocentBridge(
     private var schedule: NarrationSchedule? = null
     private var scheduleRoute: List<LatLng> = emptyList()
     private var scheduleTexts: Map<String, String> = emptyMap()
+    /** 학습 모드 (기능 5): 공부할 언어 · 곳마다 복습 퀴즈 {언어: {question, must, right, wrong}} · 이미 물은 곳 */
+    private var learnLang: String? = null
+    private var scheduleLearn: Map<String, Map<*, *>> = emptyMap()
+    private val learnAsked = HashSet<String>()
+    /** 공부할 언어로 들려준 곳 (복습 퀴즈는 이 곳들만) */
+    private val learnHeard = HashSet<String>()
     /** 외국어 해설 (기능 4 · 명소마다 foreign {언어: 글, phrase: {ko, roman, 언어: 뜻}}) */
     private var scheduleForeign: Map<String, Map<*, *>> = emptyMap()
     /** 지나친 곳 한 줄 (기능 1 · 명소마다 passed) */
@@ -233,6 +239,7 @@ class DocentBridge(
         val n = narrator
         if (n != null) {
             n.tick()
+            askLearnReview(n.snapshot())
             val before = n.snapshot()
             // 「지금 들려드릴까요?」 를 다 물었으면 대답을 한 번 들음 (해설 중에 계속 듣지는 않음)
             if (before.awaitingAnswer && before.state == Narrator.State.DONE) {
@@ -302,6 +309,12 @@ class DocentBridge(
             (m["passed"] as? String)?.takeIf { it.isNotBlank() }?.let { id to it }
         }.toMap()
         pendingPassed = null
+        scheduleLearn = list(req["pois"]).mapNotNull { p ->
+            val m = p as? Map<*, *> ?: return@mapNotNull null
+            val id = m["id"] as? String ?: return@mapNotNull null
+            (m["learn"] as? Map<*, *>)?.let { id to it }
+        }.toMap()
+        learnAsked.clear()
         scheduleForeign = list(req["pois"]).mapNotNull { p ->
             val m = p as? Map<*, *> ?: return@mapNotNull null
             val id = m["id"] as? String ?: return@mapNotNull null
@@ -350,6 +363,7 @@ class DocentBridge(
         var start: JSONObject? = null
         tick.start?.let { e ->
             val story = storyFor(e.id, e.name)
+            quiz.cancel()   // 답을 못 받은 문제는 다음 곳 해설이 시작되면 버림
             trip.heard(e.id, e.name)
             val n = narrator
             if (n != null) n.play(story)
@@ -383,7 +397,36 @@ class DocentBridge(
         if (lang != "ko" && !text.isNullOrBlank()) {
             return Narrator.Story(id, name, Narrator.split(text) + listOfNotNull(phraseLine(f["phrase"] as? Map<*, *>, lang)), lang)
         }
+        // 학습 모드: 한국어 승객이 공부할 언어로 같은 해설을 들음
+        val study = learnLang
+        val studyText = f?.get(study) as? String
+        if (lang == "ko" && study != null && !studyText.isNullOrBlank()) {
+            learnHeard += id
+            return Narrator.Story(id, name, Narrator.split(studyText), study)
+        }
         return Narrator.Story(id, name, Narrator.split(scheduleTexts[id].orEmpty()))
+    }
+
+    /** 학습 모드: 곳 해설이 끝나면 그 곳 복습 퀴즈를 공부할 언어로 한 번 */
+    private fun askLearnReview(s: Narrator.Snapshot) {
+        val study = learnLang ?: return
+        val id = s.storyId ?: return
+        if (s.state != Narrator.State.DONE || id !in learnHeard || id in learnAsked || quiz.current != null) return
+        val item = scheduleLearn[id]?.get(study) as? Map<*, *> ?: return
+        learnAsked += id
+        val must = (item["must"] as? List<*>).orEmpty().filterIsInstance<String>()
+        askQuiz(QuizItem(id, item["question"] as? String ?: return, must, item["right"] as? String ?: "", item["wrong"] as? String ?: ""), study)
+    }
+
+    /**
+     * 학습 모드 켜기 · 끄기 (기능 5). 입력 {"lang":"en"|"es"|null} · 출력은 voiceState 와 같음
+     */
+    @JavascriptInterface
+    fun learn(requestJson: String): String {
+        learnLang = JSONObject(requestJson).optString("lang").takeIf { it == "en" || it == "es" }
+        learnAsked.clear()
+        learnHeard.clear()
+        return voiceState("{}")
     }
 
     /** 지나친 곳 한 줄을 지금 말해도 되는지: 말하는 장치가 쉬고(아무것도 안 하거나 다 말함 · 물음 중 아님) 멈춤 방식이 아님 */
@@ -452,7 +495,8 @@ class DocentBridge(
             if (listening) return false
             listening = true
         }
-        val language = engine.decide().language
+        // 퀴즈 답은 문제를 낸 언어로 들음 (학습 모드 복습 퀴즈는 공부할 언어)
+        val language = if (quiz.current != null) quizLang else engine.decide().language
         val failed: (String) -> Unit = { why ->
             listening = false
             heard = JSONObject().put("text", "").put("command", Command.NONE.name).put("error", why)
@@ -480,7 +524,7 @@ class DocentBridge(
         // 퀴즈 답을 기다리면 들은 말은 답 (「다시」 는 문제를 한 번 더)
         if (quiz.current != null && command != Command.REPEAT) {
             val r = quiz.answer(text) ?: return
-            narrator?.play(Narrator.Story(r.id + QUIZ_SUFFIX + ":a", "퀴즈", Narrator.split(r.line)))
+            narrator?.play(Narrator.Story(r.id + QUIZ_SUFFIX + ":a", "퀴즈", Narrator.split(r.line), quizLang))
             heard = JSONObject().put("text", text).put("command", "ANSWER").put("done", true).put("atMs", System.currentTimeMillis())
                 .put("quiz", JSONObject().put("id", r.id).put("ok", r.ok).put("line", r.line))
             return
@@ -536,10 +580,17 @@ class DocentBridge(
         val o = JSONObject(requestJson)
         val must = o.optJSONArray("must")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
         val item = QuizItem(o.optString("id"), o.optString("question"), must, o.optString("right"), o.optString("wrong"))
-        quiz.ask(item)
-        listenedForQuiz = false
-        narrator?.play(Narrator.Story(item.id + QUIZ_SUFFIX, "퀴즈", Narrator.split(item.question)))
+        askQuiz(item, o.optString("lang", "ko").ifBlank { "ko" })
         return voiceState("{}")
+    }
+
+    private var quizLang = "ko"
+
+    private fun askQuiz(item: QuizItem, lang: String) {
+        quiz.ask(item)
+        quizLang = lang
+        listenedForQuiz = false
+        narrator?.play(Narrator.Story(item.id + QUIZ_SUFFIX, "퀴즈", Narrator.split(item.question), lang))
     }
 
     /**

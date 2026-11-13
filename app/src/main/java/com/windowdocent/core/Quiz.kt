@@ -2,7 +2,7 @@ package com.windowdocent.core
 
 /**
  * 가족 퀴즈 한 문제 (기능 3).
- * @param must 답에 들어 있어야 하는 낱말 모두 (예: 계룡산 = 닭, 용)
+ * @param must 답에 들어 있어야 하는 낱말 모두 (예: 계룡산 = 닭, 용). 낱말 하나에 「autumn|fall」 처럼 쓰면 그중 하나
  * @param right 맞혔을 때 한마디 · @param wrong 틀렸을 때 한마디(정답을 알려 줌)
  */
 data class QuizItem(
@@ -31,6 +31,11 @@ class QuizBook {
         asked++
     }
 
+    /** 답을 기다리던 문제를 버림 (다음 곳 해설이 시작되면 · 답 없이 지난 문제는 셈하지 않음) */
+    fun cancel() {
+        current = null
+    }
+
     /** 들은 답을 채점하고 한마디를 돌려줌. 기다리는 문제가 없으면 null */
     fun answer(heard: String): Result? {
         val item = current ?: return null
@@ -47,7 +52,7 @@ class QuizBook {
         /** 띄어쓰기 · 문장부호 · 대소문자를 빼고, 답에 꼭 들어야 하는 낱말이 모두 있으면 정답 */
         fun judge(item: QuizItem, heard: String): Boolean {
             val t = normalize(heard)
-            return item.must.isNotEmpty() && item.must.all { t.contains(normalize(it)) }
+            return item.must.isNotEmpty() && item.must.all { w -> w.split('|').any { t.contains(normalize(it)) } }
         }
 
         fun normalize(s: String): String = s.lowercase().replace(Regex("[\\s\\p{Punct}·~!?.,]"), "")

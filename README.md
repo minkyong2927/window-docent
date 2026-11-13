@@ -30,7 +30,7 @@ gradle :app:assembleRelease
 | 가속 | WHPX |
 | 도구 | adb 37.0.1, 에뮬레이터 37.2.13, 가상 콘솔 |
 | 빌드 | GitHub Actions, JDK 17 |
-| 단위 테스트 | JVM 에서 167개, 차량 없이 돎 |
+| 단위 테스트 | JVM 에서 169개, 차량 없이 돎 |
 
 ## 3. 필요한 설정
 
@@ -86,6 +86,7 @@ gradle :app:assembleRelease
 | 기능 3 가족 퀴즈 문제, 들은 답 채점, 점수 | 완료 | Quiz.kt 외 1 |
 | 여행 기록, 들은 곳, 퀴즈, 들른 곳, 멈춤, 못 들은 이야기, QR | 완료, 휴대폰 스캔은 확인 전 | TripRecord.kt 외 3 |
 | 기능 4 외국어 승객 해설, 한국어 한마디, 내릴 때 QR | 완료 | DocentBridge.kt 외 1 |
+| 기능 5 학습 모드, 공부할 언어 해설, 복습 퀴즈 | 완료 | DocentBridge.kt 외 1 |
 | 4 음성 명령, 다시 말하기 | 완료, 마이크 확인 전 | VoiceCommand.kt 외 1 |
 | 5 ~ 8 경유지, 퀴즈, 기록과 QR, 외국어 | 진행 중 | |
 
@@ -108,6 +109,7 @@ gradle :app:assembleRelease
 | sample-data/stories.js | 들러볼 곳 1 | 시나리오 A 죽녹원 대나무축제 | TourAPI 행사 정보 |
 | sample-data/stories.js | 퀴즈 3 | 지나친 곳 한 줄 안의 낱말이 답 | TourAPI 사실로 만든 문제 |
 | sample-data/stories.js | 외국어 해설 3, 한국어 한마디 3 | 같은 명소 셋을 영어, 스페인어로, 인사 감사 맛 표현 | TourAPI 다국어 소개글 |
+| sample-data/stories.js | 복습 퀴즈 3 | 가족 퀴즈 셋을 공부할 언어로 | TourAPI 사실로 만든 문제 |
 
 - 공모전이 주지 않는 자료만 임의로 씀
 - 화면에도 시연 자료라고 적음
@@ -152,6 +154,7 @@ gradle :app:assembleRelease
 - 신호 단추로 방향지시등, 내비 음성, 브레이크, 속도, 좌석, 언어, 도어를 바꿔 판단을 봄
 - 주행 흉내 단추로 예정표가 접히고 시작 지점에서 해설이 시작
 - 위험 구간 단추로 해설이 멈추고 끄면 이어 말함
+- 학습 모드 단추로 해설을 영어나 스페인어로 듣고 곳마다 복습 퀴즈
 - 다시, 응, 나중에 단추는 음성 명령 흉내, 말하기 단추는 앱에서만 듣기
 - 차량 신호 단추는 앱에서 Pleos SDK 값으로 판단
 - 시연 영상 docs/demo.webm, 무음, 새 화면으로 다시 찍을 예정

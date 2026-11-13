@@ -27,6 +27,15 @@ window.SAMPLE_STORIES = {
                es: 'Estamos cerca de Naejangsan. Es una montaña famosa por sus hojas de otoño.',
                phrase: { ko: '맛있어요', roman: 'masisseoyo', en: 'it is delicious', es: 'está delicioso' } }
   },
+  // 기능 5 · 학습 모드 복습 퀴즈 (3곳, 영어 · 스페인어) · 기준: 가족 퀴즈 셋을 공부할 언어로 옮김, 해설은 위 외국어 해설을 그대로 씀
+  learn: {
+    cheonan: { en: { question: 'What tree is in the Cheonan Samgeori folk song?', must: ['willow'], right: 'Correct! A weeping willow.', wrong: 'Good try. The answer is a weeping willow.' },
+               es: { question: '¿Qué árbol aparece en la canción de Cheonan Samgeori?', must: ['sauce'], right: '¡Correcto! Un sauce llorón.', wrong: 'Casi. La respuesta es un sauce llorón.' } },
+    gyeryong: { en: { question: 'Which two animals are hidden in the name Gyeryongsan?', must: ['rooster|chicken', 'dragon'], right: 'Correct! A rooster and a dragon.', wrong: 'Good try. The answer is a rooster and a dragon.' },
+                es: { question: '¿Qué dos animales se esconden en el nombre Gyeryongsan?', must: ['gallo', 'drag'], right: '¡Correcto! Un gallo y un dragón.', wrong: 'Casi. La respuesta es un gallo y un dragón.' } },
+    naejang: { en: { question: 'In which season is Naejangsan most famous?', must: ['autumn|fall'], right: 'Correct! In autumn.', wrong: 'Good try. The answer is autumn.' },
+               es: { question: '¿En qué estación es más famoso Naejangsan?', must: ['otoño|otono'], right: '¡Correcto! En otoño.', wrong: 'Casi. La respuesta es otoño.' } }
+  },
   // 기능 2 · 들러볼 곳 (행사 중인 곳 1곳) · 기준: 기획안 시나리오 A 의 들러볼 곳(담양 죽녹원 대나무축제), 경로에서 몇 분인지는 시연 경로 값
   events: {
     juknok: { what: '대나무축제', away: '3분', text: '지금 담양은 대나무축제 기간이에요. 죽녹원은 가는 길에서 3분이면 들를 수 있어요. 들러 갈까요?' }
