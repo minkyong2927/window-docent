@@ -27,7 +27,7 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 ## Pleos Connect 에뮬레이터 버전과 화면 규격
 
 - 대상: Pleos Connect Emulator 2.1.0 (Android 14, API 34, Automotive, AVD 'Pleos Connect v2.1.0')
-- 앱은 기본으로 화면 아래 '시연용 차량 신호' 판으로 동작하고, '차량 신호'를 켜면 Pleos Connect SDK 신호를 받도록 코드가 연결돼 있음. 에뮬레이터에서의 실행 확인은 2차 준비 기간에 진행
+- 1차 제출본은 에뮬레이터에서 아직 실행해 보지 않음 (에뮬레이터 설치에는 약관 동의가 필요해 1차 결과(11/23) 뒤로 미룸). 앱은 기본으로 화면 아래 '시연용 차량 신호' 판으로 동작하고, '차량 신호'를 켜면 Pleos Connect SDK 신호를 받도록 코드가 연결돼 있음
 - 화면 규격: 1920×1080 기준으로 그린 화면을 기기 화면 크기에 맞춰 통째로 줄이고 늘림 (1280×720, 1920×720, 1024×768, 2560×1440에서 전체가 보이는 것을 확인)
 
 ## APK 위치
@@ -84,6 +84,19 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 
 ## Pleos Connect SDK 사용
 
+공모전이 제공하는 것의 활용 상태 (1차 제출 기준)
+
+| 제공되는 것 | 이 저장소에서 | 파일 |
+|---|---|---|
+| Vehicle SDK 2.3.2 | 방향지시등·조향각·브레이크·도어·좌석 착석 (읽기만) | `pleos/PleosSignalSource.kt` |
+| NaviHelper SDK 3.0.5 | 다음 안내 거리, 위험 지점·카메라, 경로 안내 시작, 도착 | `pleos/PleosSignalSource.kt` |
+| FusedLocation SDK 1.1.3 | 위치 (속도 계산, 해설 시작 판단) | `pleos/PleosSignalSource.kt` |
+| TextToSpeech SDK 3.3.1 | 해설 음성 (기기 안 음성 ON_DEVICE · 앱 등록 없음) | `pleos/PleosSpeaker.kt` |
+| SpeechToText SDK 3.3.1 | 아직 안 씀 (음성 명령은 구현 중 · 기기 안 인식 ON_DEVICE 로만) | |
+| 공식 샘플 앱 셋 (vehicle · navi · fusedlocation) | SDK 저장소 주소·의존성·매니페스트 설정을 따라 함 | `settings.gradle.kts`, `app/build.gradle.kts`, `AndroidManifest.xml` |
+| Pleos Connect Emulator 2.1.0 | 아직 안 씀 (1차 결과 뒤) | |
+
+
 차량 제어(set) API는 쓰지 않고 조회·음성 API만 사용. API 이름은 공개 SDK(Vehicle 2.3.2, NaviHelper 3.0.5, FusedLocation 1.1.3, TextToSpeech·SpeechToText 3.3.1) 묶음에서 확인. 확인 수준: '코드 연결' = 저장소 코드가 그 API를 부르고 SDK와 함께 컴파일됨(에뮬레이터 실행 확인은 2차), '계획' = 아직 코드 없음.
 
 | SDK | 쓰는 API | 용도 | 확인 수준 |
@@ -102,7 +115,10 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 
 - 관광지 원천: 한국관광공사 TourAPI (좌표·개요·운영시간·행사, 다국어) · 2차. 1차는 시연 경로의 명소 7곳을 화면 안에 넣은 자료로 동작
 - 해설 문장·퀴즈 생성(LLM)은 Pleos SDK를 쓰지 않음: TourAPI 사실 필드를 언어·길이·대상에 맞게 미리 문장화해 `FactGuard`로 검증해 두고, 차 안에서는 TextToSpeech로 재생
-- 내비 안내 음성이 나오는 중인지는 NaviHelper에 없어 안드로이드 `AudioManager` 재생 정보(용도가 길 안내 음성인 소리)로 판단 (`NaviVoiceWatcher`)
+- Pleos 문서에 없는 안드로이드 기능 둘 (SDK에 같은 기능이 없어서):
+  - 내비 안내 음성이 나오는 중인지: 안드로이드 `AudioManager` 재생 목록에서 용도가 길 안내 음성인 소리를 봄 (`NaviVoiceWatcher` · Pleos 기기에서도 이것으로 판단)
+  - 해설 음성: Pleos 기기에서는 Pleos TextToSpeech 만 씀. Pleos 음성 서비스가 없는 기기(휴대폰 등)에서만 안드로이드 기본 TTS로 대신하고, 그것도 없으면 소리 없이 진행 (`AppSpeaker`)
+- 음성 인식은 Pleos SpeechToText SDK로만 하고, 차량 마이크 음성을 바깥 음성 인식 서비스로 보내지 않음 (공지 규정). 브라우저 시연에서는 음성 인식 대신 흉내 단추를 씀
 - 차속은 Vehicle SDK에 없어 FusedLocation 위치 변화로 계산 (`SpeedEstimator`), 못 구하는 동안은 '모름'
 - 경로 좌표열은 NaviHelper가 주지 않음(출발·경유·도착 점만) → 1차 해설 예정은 앱이 가진 시연 경로로 계산하고, 명소에 가까워졌는지는 위치를 그 경로에 투영해 판단(반경 진입 알림 `addProximityAlert` 대신)
 
