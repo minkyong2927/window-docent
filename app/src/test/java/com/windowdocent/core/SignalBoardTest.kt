@@ -142,4 +142,21 @@ class SignalBoardTest {
         board.door("ROW_2_LEFT", true)
         assertEquals(NarrationMode.TRIP_RECORD, gate.evaluate(board.signals()).mode)
     }
+
+    @Test fun hazardAheadBecomesCautionZone() {
+        board.hazards(listOf(Hazard("s", "SCHOOL_ZONE", 900.0)))
+        assertNull(board.signals().cautionZone)
+        board.hazards(listOf(Hazard("s", "SCHOOL_ZONE", 250.0)))
+        assertEquals("SCHOOL_ZONE", board.signals().cautionZone)
+        now += 16_000                                     // 위험 지점 신호가 15초 넘게 안 옴
+        assertNull(board.signals().cautionZone)
+    }
+
+    @Test fun arrivalIsTrueForAMinute() {
+        assertFalse(board.signals().arrived)
+        board.arrived()
+        assertTrue(board.signals().arrived)
+        now += 61_000
+        assertFalse(board.signals().arrived)
+    }
 }

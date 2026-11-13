@@ -335,4 +335,26 @@ class DocentBridgeTest {
         assertEquals("IDLE", r.getString("state"))
         assertEquals(1, speaker.stops)
     }
+
+    @Test fun cautionButtonHoldsAndArrivalOffersMissedStory() {
+        val speaker = FakeSpeaker()
+        val bridge = DocentBridge(speaker = speaker)
+        val near = state().replace("\"lang\":\"ko\"", "\"lang\":\"ko\",\"caution\":\"SCHOOL_ZONE\",\"cautionDist\":200")
+        bridge.evaluate(state())
+        bridge.speak("""{"id":"a","title":"계룡산","text":"첫 문장이에요. 둘째 문장이에요."}""")
+        assertEquals("CAUTION_ZONE", JSONObject(bridge.evaluate(near)).getString("reason"))
+        bridge.evaluate(state()); speaker.finish()            // 한마디 → 첫 문장 다시
+        bridge.evaluate(near); bridge.evaluate(state())       // 같은 문장이 또 끊김 → 다음 문장으로
+        speaker.finish(); speaker.finish()
+        var v = JSONObject(bridge.voiceState("{}"))
+        assertEquals("첫 문장이에요.", v.getJSONArray("missed").getJSONObject(0).getJSONArray("sentences").getString(0))
+        val arrive = state().replace("\"lang\":\"ko\"", "\"lang\":\"ko\",\"arrived\":true")
+        bridge.evaluate(arrive)                               // 도착 → 한 번 묻기
+        assertEquals("ko:" + Narrator.offerLine(1), speaker.said.last())
+        speaker.finish()
+        assertTrue(JSONObject(bridge.voiceState("{}")).getBoolean("awaiting"))
+        v = JSONObject(bridge.voiceAnswer("""{"yes":true}"""))  // 응
+        assertEquals("ko:첫 문장이에요.", speaker.said.last())
+        assertEquals(0, v.getJSONArray("missed").length())
+    }
 }

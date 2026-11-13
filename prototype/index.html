@@ -150,6 +150,8 @@
   .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 11px;font-size:16px;cursor:pointer;font-family:inherit;white-space:nowrap}
   body.auto .controls{display:none}
   .btn.on{border-color:var(--accent);color:var(--accent);font-weight:700}
+  .btn.ans{display:none}
+  body.ask .btn.ans{display:inline-block;border-color:var(--accent);color:var(--accent)}
   body.live .btn.sigbtn{opacity:.35;pointer-events:none}
   .livestat{display:none;font-size:15px;color:var(--sub);white-space:nowrap}
   body.live .livestat{display:inline}
@@ -253,11 +255,14 @@
       <button class="btn sigbtn" data-a="speed">속도</button>
       <button class="btn sigbtn" data-a="rear">뒷좌석</button>
       <button class="btn" data-a="lang">승객 언어</button>
+      <button class="btn sigbtn" data-a="caution">위험 구간</button>
       <button class="btn sigbtn" data-a="door">도어</button>
       <button class="btn" data-a="fact">사실 검증</button>
       <button class="btn" data-a="auto">자동 시연</button>
       <button class="btn" data-a="live" id="btnLive">차량 신호</button>
       <button class="btn on" data-a="sound" id="btnSound">소리 켬</button>
+      <button class="btn ans" data-a="yes" title="음성 명령 흉내 · 응, 들려줘">🎤 응</button>
+      <button class="btn ans" data-a="no" title="음성 명령 흉내 · 나중에">🎤 나중에</button>
     </div>
   </div>
   <div class="signals">
@@ -323,7 +328,12 @@ function callEngine(method, payload){
 }
 
 // 시연용 신호 판 상태. null 은 '못 받은 값'.
-const S = { turn:'off', steer:0, speed:98, brake:false, nav:null, navDist:null, rear:false, front:false, door:false, lang:'ko' };
+const S = { turn:'off', steer:0, speed:98, brake:false, nav:null, navDist:null, rear:false, front:false, door:false, lang:'ko', caution:null, cautionDist:null, arrived:false };
+// 위험으로 보는 종류 (Kotlin CautionZone.DANGER 와 같음) · 화면 이름
+const CAUTION = { SCHOOL_ZONE:'어린이 보호구역', ACCIDENT_PRONE_AREA:'사고 다발 구역', RAILROAD_CROSSING:'철길 건널목', FOG_AREA:'안개 구역',
+  FALLING_ROCK_AREA:'낙석 주의 구간', DOWNHILL_CAUTION_AREA:'급경사 내리막', WILDLIFE_CROSSING:'야생동물 출몰 구간', NARROW_ROAD:'좁은 길',
+  HIGHWAY_CONSTRUCTION:'공사 구간', SLIPPERY_ROAD_ALERT:'미끄러운 길', ROAD_DAMAGE_ALERT:'도로 파손', WRONG_WAY_DRIVING_ALERT:'역주행 알림',
+  SIGN_MALFUNCION:'신호기 고장', SPEED_CAMERA_SCHOOL_ZONE:'어린이 보호구역', SPEED_CAMERA_SCHOOL_ZONE_TRAFFIC_LIGHT:'어린이 보호구역' };
 const LANG = { en:'English', es:'Español' };
 
 // 판단 근거(엔진의 GateReason) → 화면 문구. l 은 브라우저용 운전 부담 단계.
@@ -332,6 +342,7 @@ const REASON = {
   TURN_SIGNAL:    { l:3, why:'<b>방향지시등 켜짐</b> → 해설을 멈춥니다', t1:'운전에 집중할 시간이에요', t2:'차선 변경이 끝나면 이야기를 이어갈게요' },
   LARGE_STEERING: { l:3, why:'<b>큰 조향</b> → 회전이 끝날 때까지 멈춤', t1:'운전에 집중할 시간이에요', t2:'회전이 끝나면 이야기를 이어갈게요' },
   NAV_VOICE:      { l:3, why:'<b>내비 안내 음성</b> → 내비가 먼저 말합니다', t1:'길 안내가 먼저예요', t2:'내비 안내가 끝나면 이야기를 이어갈게요' },
+  CAUTION_ZONE:   { l:3, why:'<b>위험 구간</b> → 지날 때까지 해설을 멈춥니다', t1:'운전에 집중할 시간이에요', t2:'위험 구간을 지나면 이야기를 이어갈게요' },
   NAV_NEAR:       { l:2, why:'<b>분기점 접근</b> → 한 문장으로 짧게' },
   STOPPED:        { l:0, why:'<b>정차 중</b> → 긴 이야기 가능' },
   CRUISING:       { l:1, why:'<b>직진 · 안내 없음</b> → 해설과 퀴즈' }
@@ -346,6 +357,7 @@ function decideLocal(){
     : S.turn !== 'off' ? 'TURN_SIGNAL'
     : (S.steer !== null && Math.abs(S.steer) >= 30) ? 'LARGE_STEERING'
     : S.nav === 'voice' ? 'NAV_VOICE'
+    : (S.caution && CAUTION[S.caution] && (S.cautionDist === null ? 0 : S.cautionDist) <= 300) ? 'CAUTION_ZONE'
     : (S.nav === 'near' && (S.navDist === null ? 0 : S.navDist) <= 1000) ? 'NAV_NEAR'
     : isStopped() ? 'STOPPED' : 'CRUISING';
   const foreign = !!S.lang && S.lang !== 'ko';
@@ -360,9 +372,10 @@ function decide(){
 
 function render(){
   const d = decide(), R = REASON[d.reason];
-  if (!VOICE.app) NARR.onMode(modeOf(d));
+  if (!VOICE.app) { NARR.onMode(modeOf(d)); if (S.arrived && !VOICE.arrived) NARR.arrived(); }
+  VOICE.arrived = !!S.arrived;
   document.querySelectorAll('.seg').forEach(s => s.classList.toggle('on', +s.dataset.l === d.level));
-  $('reason').innerHTML = R.why;
+  $('reason').innerHTML = d.reason === 'CAUTION_ZONE' ? '<b>위험 구간(' + (CAUTION[S.caution] || '위험 지점') + ')</b> → 지날 때까지 해설을 멈춥니다' : R.why;
   $('pause').classList.toggle('on', d.level === 3);
   if (R.t1) { $('pauseT1').textContent = R.t1; $('pauseWhy').textContent = R.t2; }
   $('record').classList.toggle('on', S.door);
@@ -378,7 +391,8 @@ function render(){
   sig('s-steer', S.steer === null ? '–' : S.steer + '°', S.steer !== null && Math.abs(S.steer) >= 30);
   sig('s-brake', S.brake ? '밟음' : '뗌', S.brake);
   sig('s-speed', S.speed === null ? '–' : S.speed + 'km/h', isStopped());
-  sig('s-nav', S.nav === 'voice' ? '음성 출력 중' : S.nav === 'near' ? '분기점 ' + distText(S.navDist) : '없음', !!S.nav);
+  sig('s-nav', S.nav === 'voice' ? '음성 출력 중' : S.nav === 'near' ? '분기점 ' + distText(S.navDist)
+    : S.caution ? (CAUTION[S.caution] || '위험 지점') + ' ' + distText(S.cautionDist) : '없음', !!S.nav || !!S.caution);
   sig('s-seat', seatText(), !!S.rear);
   sig('s-door', S.door ? '열림' : '닫힘', S.door);
   $('navcard').classList.toggle('on', !!S.nav);
@@ -518,7 +532,32 @@ const browserSpeaker = {
 
 // 브라우저용 Narrator: Kotlin core/Narrator.kt 와 같은 규칙
 function makeNarrator(speaker){
-  const N = { story:null, index:0, state:'IDLE', interrupted:false, mode:'NARRATE', budget:0, token:0, resume:false, speaking:null, error:null, lines:[] };
+  const N = { story:null, index:0, state:'IDLE', interrupted:false, mode:'NARRATE', budget:0, token:0, resume:false, speaking:null, error:null, lines:[],
+    cuts:{}, missed:[], awaiting:false, wantOffer:false, stopOfferDone:false, arrivalOfferDone:false, stoppedSince:null };
+  const OFFER_ID = 'offer';
+  const offerLine = n => '아까 못 한 이야기가 ' + n + '개 있어요. 지금 들려드릴까요?';
+  function start(st){
+    Object.assign(N, { story:st, index:0, interrupted:false, resume:false, error:null, lines:[], cuts:{} });
+    if (st.id !== OFFER_ID) N.awaiting = false;
+    N.state = st.sentences.length ? 'WAITING' : 'DONE';
+  }
+  function addMissed(st, sentences){
+    if (!sentences.length) return;
+    const m = N.missed.find(x => x.id === st.id);
+    if (m) sentences.forEach(t => { if (m.sentences.indexOf(t) < 0) m.sentences.push(t); });
+    else N.missed.push({ id:st.id, title:st.title, sentences:sentences.filter((t, i, a) => a.indexOf(t) === i) });
+  }
+  function keepUnheard(){
+    const st = N.story; if (!st || st.arrival) return;
+    if (N.state === 'PAUSED') addMissed(st, st.sentences.slice(N.index));
+  }
+  function offerIfFree(){
+    if (!N.wantOffer || !N.missed.length) return;
+    if (N.state === 'SPEAKING' || N.state === 'PAUSED' || N.state === 'WAITING' || N.mode === 'HOLD') return;
+    N.wantOffer = false; N.awaiting = true;
+    start({ id:OFFER_ID, title:'못 한 이야기', sentences:[offerLine(N.missed.length)], lang:(N.story && N.story.lang) || 'ko', arrival:true });
+    advance();
+  }
   function cancel(markCut){
     if (N.state === 'SPEAKING') { N.token++; speaker.stop(); if (markCut && N.lines.length) N.lines[N.lines.length - 1].cut = true; }
     N.speaking = null; N.resume = false;
@@ -532,8 +571,17 @@ function makeNarrator(speaker){
   function advance(){
     const st = N.story; if (!st) return;
     if (N.state !== 'WAITING' && N.state !== 'PAUSED') return;
-    if (N.mode === 'HOLD' || N.mode === 'TRIP_RECORD') return;
-    if (N.state === 'PAUSED' && N.interrupted) { N.interrupted = false; say(RESUME_LINE, true); return; }
+    if (N.mode === 'HOLD') return;
+    if (N.mode === 'TRIP_RECORD' && !st.arrival) return;
+    if (N.state === 'PAUSED' && N.interrupted) {
+      N.interrupted = false;
+      if ((N.cuts[N.index] || 0) >= 2) {   // 같은 문장이 두 번 끊김: 다음 문장으로 · 그 문장은 못 한 이야기에
+        addMissed(st, [st.sentences[N.index]]);
+        N.index++;
+        if (N.index >= st.sentences.length) { N.state = 'DONE'; offerIfFree(); return; }
+      }
+      say(RESUME_LINE, true); return;
+    }
     if (N.mode === 'ONE_LINE') { if (N.budget <= 0) { N.state = 'WAITING'; return; } N.budget--; }
     say(st.sentences[N.index], false);
   }
@@ -544,39 +592,56 @@ function makeNarrator(speaker){
     const st = N.story; if (!st) return;
     if (N.resume) { N.resume = false; N.state = 'WAITING'; if (N.mode !== 'ONE_LINE') say(st.sentences[N.index], false); else advance(); return; }
     N.index++;
-    if (N.index >= st.sentences.length) { N.state = 'DONE'; return; }
+    if (N.index >= st.sentences.length) { N.state = 'DONE'; offerIfFree(); return; }
     N.state = 'WAITING'; advance();
   }
-  N.play = st => { cancel(false); Object.assign(N, { story:st, index:0, interrupted:false, resume:false, error:null, lines:[] }); N.state = st.sentences.length ? 'WAITING' : 'DONE'; advance(); };
-  N.stopAll = () => { cancel(false); N.story = null; N.lines = []; N.state = 'IDLE'; };
+  N.play = st => { keepUnheard(); cancel(false); start(st); advance(); };
+  N.stopAll = () => { cancel(false); N.story = null; N.lines = []; N.awaiting = false; N.state = 'IDLE'; };
+  N.tick = () => {
+    if (N.stoppedSince !== null && !N.stopOfferDone && N.missed.length && Date.now() - N.stoppedSince >= 5000) { N.stopOfferDone = true; N.wantOffer = true; }
+    offerIfFree();
+  };
+  N.arrived = () => { if (N.arrivalOfferDone || !N.missed.length) return; N.arrivalOfferDone = true; N.wantOffer = true; offerIfFree(); };
+  N.answer = yes => {
+    if (!N.awaiting) return; N.awaiting = false; if (!yes) return;
+    const sentences = [].concat(...N.missed.map(m => m.sentences)); N.missed = [];
+    if (!sentences.length) return;
+    cancel(false); start({ id:'missed', title:'못 한 이야기', sentences, lang:(N.story && N.story.lang) || 'ko', arrival:true }); advance();
+  };
   N.onMode = m => {
     const before = N.mode; N.mode = m;
     if (m === 'ONE_LINE' && before !== 'ONE_LINE') N.budget = N.state === 'SPEAKING' ? 0 : 1;
-    if (m === 'TRIP_RECORD') { if (N.story && N.state !== 'DONE') { cancel(true); N.state = 'DONE'; } }
-    else if (m === 'HOLD') { if (N.state === 'SPEAKING') { cancel(true); N.interrupted = true; N.state = 'PAUSED'; } }
+    if (m !== 'LONG_STORY') N.stoppedSince = null; else if (N.stoppedSince === null) N.stoppedSince = Date.now();
+    if (m === 'TRIP_RECORD') { if (N.story && !N.story.arrival && N.state !== 'DONE') { keepUnheard(); cancel(true); N.state = 'DONE'; } }
+    else if (m === 'HOLD') { if (N.state === 'SPEAKING') { const cutSentence = !N.resume; cancel(true); if (cutSentence) N.cuts[N.index] = (N.cuts[N.index] || 0) + 1; N.interrupted = true; N.state = 'PAUSED'; } }
     else advance();
+    N.tick();
   };
   N.snapshot = () => ({ available:true, device: SOUND && window.speechSynthesis ? '브라우저 음성' : '소리 없음', id:N.story && N.story.id,
-    title:N.story && N.story.title, state:N.state, index:N.index, total:N.story ? N.story.sentences.length : 0, speaking:N.speaking, error:N.error, lines:N.lines });
+    title:N.story && N.story.title, state:N.state, index:N.index, total:N.story ? N.story.sentences.length : 0, speaking:N.speaking, error:N.error, lines:N.lines,
+    awaiting:N.awaiting, missed:N.missed });
   return N;
 }
 const NARR = makeNarrator(browserSpeaker);
-const VOICE = { app:false, seq:0, quiz:false, seen:[], last:'' };
+const VOICE = { app:false, seq:0, quiz:false, nextQuiz:false, seen:[], last:'', id:null, arrived:false };
 VOICE.app = !!(BRIDGE && BRIDGE.speak && (callEngine('voiceState', {}) || {}).available);
 function modeOf(d){ return d.reason === 'DOOR_OPEN' ? 'TRIP_RECORD' : d.level === 3 ? 'HOLD' : d.level === 2 ? 'ONE_LINE' : d.level === 0 ? 'LONG_STORY' : 'NARRATE'; }
-function voiceState(){ return VOICE.app ? (callEngine('voiceState', {}) || { lines:[] }) : NARR.snapshot(); }
+function voiceState(){ if (VOICE.app) return callEngine('voiceState', {}) || { lines:[] }; NARR.tick(); return NARR.snapshot(); }
 
 function doc(text, quiz=false){
   $('db').classList.remove('hidden');
-  VOICE.quiz = quiz; VOICE.seen = [];
+  VOICE.nextQuiz = quiz; VOICE.quiz = quiz; VOICE.seen = [];
   const story = { id:'d' + (++VOICE.seq), title: quiz ? '퀴즈' : '해설', sentences: splitSentences(text), lang:'ko' };
   if (VOICE.app) callEngine('speak', story); else NARR.play(story);
   voiceTick();
 }
 // 말한 줄을 화면에: 앞 줄은 다, 지금 줄은 말하는 만큼(글자당 45ms), 끊긴 줄은 끊긴 데까지 + ' —'
 function voiceTick(){
-  if ($('db').classList.contains('hidden')) return;
   const v = voiceState(), lines = v.lines || [], now = Date.now();
+  document.body.classList.toggle('ask', !!v.awaiting);
+  if (v.id && (v.id === 'offer' || v.id === 'missed')) $('db').classList.remove('hidden');   // 도착 · 정차 때 제안은 해설 글 상자에
+  if ($('db').classList.contains('hidden')) return;
+  if (v.id !== VOICE.id) { VOICE.id = v.id; VOICE.seen = []; VOICE.quiz = VOICE.nextQuiz; VOICE.nextQuiz = false; }
   let html = VOICE.quiz ? '<span class="quizbadge">퀴즈</span>' : '';
   lines.forEach((l, i) => {
     const seen = VOICE.seen[i] && VOICE.seen[i].t === l.t ? VOICE.seen[i] : (VOICE.seen[i] = { t:l.t, at:now, cutAt:null });
@@ -592,6 +657,7 @@ function voiceTick(){
   st.textContent = v.state === 'SPEAKING' ? '· 🔊 ' + (v.device || '음성') + ' · ' + Math.min(v.index + 1, v.total) + '/' + v.total
     : v.state === 'PAUSED' ? '· ❚❚ 멈춤 · 끝나면 이어서'
     : v.state === 'WAITING' ? '· 다음 문장은 지나간 뒤에'
+    : v.awaiting ? '· 🎤 「응」 또는 「나중에」 를 기다려요'
     : '';
 }
 function esc(t){ return String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' })[c]); }
@@ -618,7 +684,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 async function scenario(){
   if (LIVE) liveOff();
   document.body.classList.add('auto');
-  Object.assign(S, { turn:'off', steer:0, speed:98, brake:false, nav:null, navDist:null, rear:false, front:false, door:false, lang:'ko' });
+  Object.assign(S, { turn:'off', steer:0, speed:98, brake:false, nav:null, navDist:null, rear:false, front:false, door:false, lang:'ko', caution:null, cautionDist:null, arrived:false });
   VIA = false; Object.keys(STOPSTATE).forEach(k => { delete STOPSTATE[k]; });
   $('score').textContent = '0 / 0'; $('wp').innerHTML = ''; $('suggest').classList.remove('on');
   hideDoc(); hideKid(); renderStops(); render();
@@ -675,7 +741,7 @@ async function scenario(){
   await wait(5000); hideKid();
 
   cap('목적지에 도착해 문이 열리면, 오늘의 여행 기록이 남습니다');
-  S.speed = 0; nav('도착', '메타세쿼이아길', '●'); eta('0분', '11:33', '0km'); $('clock').textContent = '11:33'; render(); await wait(800);
+  S.speed = 0; S.arrived = true; nav('도착', '메타세쿼이아길', '●'); eta('0분', '11:33', '0km'); $('clock').textContent = '11:33'; render(); await wait(800);
   S.door = true; render(); hideDoc();
   await wait(6500);
   cap('창밖 도슨트 — 길을 미리 읽고, 운전 상황에 맞춰 먼저 말하는 차량용 도슨트');
@@ -693,6 +759,8 @@ document.querySelectorAll('.btn').forEach(b => b.onclick = () => {
   if (a === 'rear') S.rear = !S.rear;
   if (a === 'lang') S.lang = S.lang === 'ko' ? 'en' : S.lang === 'en' ? 'es' : 'ko';
   if (a === 'door') S.door = !S.door;
+  if (a === 'caution') { S.caution = S.caution ? null : 'SCHOOL_ZONE'; S.cautionDist = S.caution ? 200 : null; }
+  if (a === 'yes' || a === 'no') { if (VOICE.app) callEngine('voiceAnswer', { yes: a === 'yes' }); else NARR.answer(a === 'yes'); return voiceTick(); }
   if (a === 'fact') return factDemo();
   if (a === 'auto') return scenario();
   if (a === 'live') return liveToggle();

@@ -10,13 +10,13 @@ enum class NarrationMode(val level: Int) {
     NARRATE(1),
     /** 분기점 접근: 한 문장으로 짧게 */
     ONE_LINE(2),
-    /** 회전·차선 변경·내비 음성: 해설 보류, 끝나면 이어서 */
+    /** 회전·차선 변경·내비 음성·위험 구간: 해설 보류, 끝나면 이어서 */
     HOLD(3),
     /** 도어 열림: 여행 기록 표시 (해설 끝) */
     TRIP_RECORD(0),
 }
 
-enum class GateReason { DOOR_OPEN, TURN_SIGNAL, LARGE_STEERING, NAV_VOICE, NAV_NEAR, STOPPED, CRUISING }
+enum class GateReason { DOOR_OPEN, TURN_SIGNAL, LARGE_STEERING, NAV_VOICE, CAUTION_ZONE, NAV_NEAR, STOPPED, CRUISING }
 
 data class GateResult(val mode: NarrationMode, val reason: GateReason)
 
@@ -34,6 +34,7 @@ class NarrationGate(private val config: DocentConfig = DocentConfig()) {
             steering != null && abs(steering) >= config.largeSteeringDeg ->
                 GateResult(NarrationMode.HOLD, GateReason.LARGE_STEERING)
             s.navGuidance == NavGuidance.VOICE -> GateResult(NarrationMode.HOLD, GateReason.NAV_VOICE)
+            s.cautionZone != null -> GateResult(NarrationMode.HOLD, GateReason.CAUTION_ZONE)
             s.navGuidance == NavGuidance.TURN_AHEAD &&
                 (s.navDistanceM ?: 0.0) <= config.navNearDistanceM ->
                 GateResult(NarrationMode.ONE_LINE, GateReason.NAV_NEAR)

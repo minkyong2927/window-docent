@@ -22,6 +22,8 @@ enum class NavGuidance {
  * - navGuidance       NaviHelper onTBTInfo (다음 안내가 있으면 TURN_AHEAD). 안내 음성 출력 중(VOICE)은 SDK 에 없어 AudioManager 재생 정보로 판단(NaviVoiceWatcher)
  * - navDistanceM      NaviHelper onTBTInfo 의 TBTInfo.distance
  * - doorOpen          Vehicle Door.registerDoorPosition
+ * - cautionZone       NaviHelper onCautionPointInfo · onCameraAlert → CautionZone (위험 구간 안이면 그 종류 이름)
+ * - arrived           NaviHelper onDestinationArrived · onWayPointArrived (도착한 뒤 잠깐 참)
  */
 data class VehicleSignals(
     val speedKmh: Double? = null,
@@ -31,6 +33,10 @@ data class VehicleSignals(
     val navGuidance: NavGuidance = NavGuidance.NONE,
     val navDistanceM: Double? = null,
     val doorOpen: Boolean = false,
+    /** 위험 구간 안이면 그 종류 이름(SDK CautionPointType · CameraType 이름), 아니면 null */
+    val cautionZone: String? = null,
+    /** 목적지 · 경유지에 막 도착함 */
+    val arrived: Boolean = false,
 )
 
 /** 좌석 착석 정보 (Vehicle Seat.registerSeatOccupancy · 조수석 ROW_1_RIGHT, 뒷좌석 ROW_2_*) */

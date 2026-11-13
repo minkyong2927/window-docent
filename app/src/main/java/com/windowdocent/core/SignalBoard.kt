@@ -29,6 +29,7 @@ interface LiveSignalSource : VehicleSignalSource {
 class SignalBoard(
     private val speed: SpeedEstimator = SpeedEstimator(),
     private val clock: () -> Long = System::currentTimeMillis,
+    private val caution: CautionZone = CautionZone(),
 ) {
     private val lock = Any()
     private var turn = TurnSignal.OFF
@@ -39,6 +40,7 @@ class SignalBoard(
     private var attentionAhead = false
     private var guidanceDistanceM: Double? = null
     private var naviSpeaking = false
+    private var arrivedAtMs: Long? = null
     private var listener: ((VehicleSignals, Seats) -> Unit)? = null
 
     fun onChange(listener: ((VehicleSignals, Seats) -> Unit)?) {
@@ -76,6 +78,12 @@ class SignalBoard(
     /** 내비 안내 음성이 나오는 중인지. NaviHelper 에는 이 값이 없어 오디오 포커스로 알아냄 */
     fun naviVoice(speaking: Boolean) = change { naviSpeaking = speaking }
 
+    /** 내비가 준 앞쪽 위험 지점 목록 (위험 지점 · 단속 카메라를 합친 것) */
+    fun hazards(list: List<Hazard>) = change { caution.update(list, clock()) }
+
+    /** 목적지 · 경유지 도착 */
+    fun arrived() = change { arrivedAtMs = clock() }
+
     /** 새 위치. 위치 변화로 속도를 계산 */
     fun location(position: LatLng, timeMs: Long) = change { speed.update(position, timeMs) }
 
@@ -86,19 +94,25 @@ class SignalBoard(
     /** 지금 값으로 다시 알림 */
     fun republish() = change { }
 
-    private fun signalsLocked() = VehicleSignals(
-        speedKmh = speed.current(clock()),
-        turnSignal = turn,
-        steeringAngleDeg = steeringDeg,
-        brakePressed = brake,
-        navGuidance = when {
-            naviSpeaking -> NavGuidance.VOICE
-            attentionAhead -> NavGuidance.TURN_AHEAD
-            else -> NavGuidance.NONE
-        },
-        navDistanceM = guidanceDistanceM,
-        doorOpen = openDoors.isNotEmpty(),
-    )
+    private fun signalsLocked(): VehicleSignals {
+        val now = clock()
+        val kmh = speed.current(now)
+        return VehicleSignals(
+            speedKmh = kmh,
+            turnSignal = turn,
+            steeringAngleDeg = steeringDeg,
+            brakePressed = brake,
+            navGuidance = when {
+                naviSpeaking -> NavGuidance.VOICE
+                attentionAhead -> NavGuidance.TURN_AHEAD
+                else -> NavGuidance.NONE
+            },
+            navDistanceM = guidanceDistanceM,
+            doorOpen = openDoors.isNotEmpty(),
+            cautionZone = caution.active(now, kmh),
+            arrived = arrivedAtMs?.let { now - it < ARRIVED_MS } == true,
+        )
+    }
 
     private fun seatsLocked() = Seats(
         frontPassenger = occupied.values.any { it == SeatSpot.FRONT_PASSENGER },
@@ -119,6 +133,9 @@ class SignalBoard(
     }
 
     companion object {
+        /** 도착한 뒤 이만큼 arrived 를 참으로 둠 */
+        private const val ARRIVED_MS = 60_000L
+
         /** 운전자가 신경 쓸 필요가 없는 내비 안내 종류 (NaviHelper TurnType 이름) */
         private val PASSIVE_TURNS = setOf("TURN_UNKNOWN", "TURN_STRAIGHT", "TURN_TUNNEL", "TURN_RESTAREA")
 

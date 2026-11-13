@@ -4,8 +4,11 @@ import ai.pleos.playground.location.fused.FusedLocation
 import ai.pleos.playground.location.fused.listener.FusedLocationListener
 import ai.pleos.playground.location.fused.model.LocationData
 import ai.pleos.playground.navi.constants.NavigationStatus
+import ai.pleos.playground.navi.data.CameraAlert
+import ai.pleos.playground.navi.data.CautionPoint
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
 import ai.pleos.playground.navi.data.TBTInfo
+import ai.pleos.playground.navi.data.WaypointArrivedInfo
 import ai.pleos.playground.navi.helper.NaviHelper
 import ai.pleos.playground.navi.helper.listener.NaviHelperEventListener
 import ai.pleos.playground.vehicle.Vehicle
@@ -23,6 +26,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
+import com.windowdocent.core.Hazard
 import com.windowdocent.core.LatLng
 import com.windowdocent.core.LiveSignalSource
 import com.windowdocent.core.SeatSpot
@@ -42,6 +46,8 @@ import com.windowdocent.core.VehicleSignals
  * | 도어 열림            | Vehicle Door.registerDoorPosition (사람이 타는 문 여섯)            |
  * | 좌석 착석            | Vehicle Seat.registerSeatOccupancy (운전석 빼고)                   |
  * | 다음 안내까지 거리    | NaviHelper onTBTInfo                                              |
+ * | 위험 구간            | NaviHelper onCautionPointInfo · onCameraAlert (남은 거리 → CautionZone) |
+ * | 도착                 | NaviHelper onDestinationArrived · onWayPointArrived               |
  * | 속도 · 정차          | FusedLocation registerFusedLocationCallback 의 위치 변화로 계산     |
  * | 내비 안내 음성 중     | SDK 에 값이 없어 앱이 넘겨 준 감시(voiceWatch · 앱의 NaviVoiceWatcher = AudioManager)     |
  *
@@ -289,9 +295,25 @@ class PleosSignalSource(
                 if (status != NavigationStatus.ROUTE_DRIVE) board.clearGuidance()
             }
 
+            override fun onCautionPointInfo(cautionPoints: List<CautionPoint>) {
+                got(NAVI)
+                hazards(caution = cautionPoints.map { Hazard(it.id, it.type.name, it.remainDistance.toDouble()) })
+            }
+
+            override fun onCameraAlert(cameraAlerts: List<CameraAlert>) {
+                got(NAVI)
+                hazards(camera = cameraAlerts.map { Hazard(it.id, it.type.name, it.remainDistance.toDouble()) })
+            }
+
             override fun onRouteEnded() = board.clearGuidance()
             override fun onRouteCancelled() = board.clearGuidance()
-            override fun onDestinationArrived(destinationArrivedInfo: DestinationArrivedInfo) = board.clearGuidance()
+
+            override fun onDestinationArrived(destinationArrivedInfo: DestinationArrivedInfo) {
+                board.clearGuidance()
+                board.arrived()
+            }
+
+            override fun onWayPointArrived(waypointArrivedInfo: WaypointArrivedInfo) = board.arrived()
         }
         // 연결이 끝나면 지금 안내를 한 번 물어봄. 연결 실패는 나중에 와서 그때 상태를 고침
         helper.initialize(
@@ -304,6 +326,19 @@ class PleosSignalSource(
         opened += { helper.release() }
         helper.addListener(events)
         opened += { helper.removeListener(events) }
+    }
+
+    /** 위험 지점과 단속 카메라는 따로 오므로 둘을 합쳐 넘김 (한쪽만 오면 다른 쪽은 지난 목록 그대로) */
+    private var lastCaution: List<Hazard> = emptyList()
+    private var lastCamera: List<Hazard> = emptyList()
+
+    private fun hazards(caution: List<Hazard>? = null, camera: List<Hazard>? = null) {
+        val all = synchronized(status) {
+            caution?.let { lastCaution = it }
+            camera?.let { lastCamera = it }
+            lastCaution + lastCamera
+        }
+        board.hazards(all)
     }
 
     // ── 위치: 속도 계산용 ────────────────────────────────────────────────────────

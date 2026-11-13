@@ -42,4 +42,11 @@ class PrototypeSignalSourceTest {
         source.push(mapOf("turn" to "right"))
         assertEquals(listOf(VehicleSignals(turnSignal = TurnSignal.LEFT)), received)
     }
+
+    @Test fun cautionWithin300mOnly() {
+        assertEquals("SCHOOL_ZONE", PrototypeSignalSource.signalsOf(mapOf("caution" to "SCHOOL_ZONE", "cautionDist" to 200)).cautionZone)
+        assertEquals(null, PrototypeSignalSource.signalsOf(mapOf("caution" to "SCHOOL_ZONE", "cautionDist" to 600)).cautionZone)
+        assertEquals(null, PrototypeSignalSource.signalsOf(mapOf("caution" to "SPEED_BUMP", "cautionDist" to 50)).cautionZone)
+        assertEquals(true, PrototypeSignalSource.signalsOf(mapOf("arrived" to true)).arrived)
+    }
 }

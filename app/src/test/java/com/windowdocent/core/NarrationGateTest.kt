@@ -59,4 +59,12 @@ class NarrationGateTest {
 
     @Test fun turnAheadWithoutDistanceIsOneLine() =
         check(highway.copy(navGuidance = NavGuidance.TURN_AHEAD), NarrationMode.ONE_LINE, GateReason.NAV_NEAR)
+
+    @Test fun cautionZoneHolds() =
+        check(highway.copy(cautionZone = "SCHOOL_ZONE"), NarrationMode.HOLD, GateReason.CAUTION_ZONE)
+
+    @Test fun naviVoiceComesBeforeCautionAndCautionBeforeTurnAhead() {
+        check(highway.copy(cautionZone = "FOG_AREA", navGuidance = NavGuidance.VOICE), NarrationMode.HOLD, GateReason.NAV_VOICE)
+        check(highway.copy(cautionZone = "FOG_AREA", navGuidance = NavGuidance.TURN_AHEAD, navDistanceM = 500.0), NarrationMode.HOLD, GateReason.CAUTION_ZONE)
+    }
 }

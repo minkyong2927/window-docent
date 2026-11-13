@@ -43,10 +43,11 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 | 화면 ↔ 엔진 | 완료 | `DocentBridge`, `prototype/index.html` | 단위 테스트(화면이 주고받는 JSON), 브라우저용 JS 규칙과 Kotlin 엔진 결과 같음 |
 | 1. 실제 차량 신호 받기 | 코드 연결 | `pleos/PleosSignalSource`, `core/SignalBoard` `SpeedEstimator`, `NaviVoiceWatcher` | SDK와 컴파일, 단위 테스트. 에뮬레이터 실행은 2차 |
 | 2. 음성으로 해설하기 (바로 멈추고 이어 말하기) | 코드 연결 | `core/Narrator`, `pleos/PleosSpeaker`, `AppSpeaker` | SDK와 컴파일, 단위 테스트, 브라우저 시연에서 소리. 에뮬레이터 실행은 2차 |
+| 2 보강. 위험 구간 멈춤 · 두 번 끊긴 문장은 넘어감 · 못 한 이야기 모아 듣기 | 코드 연결 | `core/CautionZone`, `core/Narrator`, `pleos/PleosSignalSource` | SDK와 컴파일, 단위 테스트, 브라우저 시연(위험 구간 · 🎤 응 / 나중에 단추). 위험 지점 남은 거리 단위(미터로 봄)는 에뮬레이터에서 확인 |
 | 3 ~ 8. 명소 접근 해설, 음성 명령, 경유지 추가, 가족 퀴즈, 여행 기록과 QR, 외국어 내용 | 진행 중 | | |
 | 관광 데이터(TourAPI)·학습 모드·에뮬레이터 실행 확인 | 2차 (~12/2) | | |
 
-- 단위 테스트 99개
+- 단위 테스트 121개
 - 앱에서는 해설 방식·청중 모드·명소 순서와 해설 길이·사실 검증·해설 음성을 모두 Kotlin 엔진이 계산 (`DocentBridge` → `DocentEngine`, `Narrator`), 화면 아래에 '판단 · Kotlin 엔진' 표시. 브라우저로 열면 같은 규칙의 JS가 대신함
 
 ## 개요
@@ -72,7 +73,8 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 | `NarrationGate` | 차량 신호로 해설 방식 결정: 정차 긴 이야기 / 직진 해설·퀴즈 / 분기점 1km 한 문장 / 회전·차선 변경·내비 음성 보류 / 도어 열림 여행 기록. 못 받은 신호는 건너뛰고, 속도를 모르면 달리는 중으로 봄 |
 | `AudienceSelector` | 좌석 착석·승객 언어로 운전자·가족·외국어 모드 자동 전환 |
 | `FactGuard` | 환각 차단: LLM 출력에 사실 필드에 없는 숫자(연도 등)가 있으면 거부하고 사실 원문으로 대체 |
-| `Narrator` | 해설을 문장마다 소리로: 멈춤(방향지시등·큰 조향·내비 음성)이면 말하던 중이라도 바로 끊고, 풀리면 "아까 하던 이야기 이어서 할게요" 뒤 끊긴 문장을 처음부터. 분기점 접근은 한 문장까지, 도어 열림이면 끝 |
+| `Narrator` | 해설을 문장마다 소리로: 멈춤(방향지시등·큰 조향·내비 음성·위험 구간)이면 말하던 중이라도 바로 끊고, 풀리면 "아까 하던 이야기 이어서 할게요" 뒤 끊긴 문장을 처음부터. 같은 문장이 두 번 끊기면 다음 문장으로 넘어가고 그 문장은 못 한 이야기에 담음. 정차가 5초 넘거나 도착하면 "아까 못 한 이야기가 n개 있어요"를 한 번 묻고 응이면 차례로 말함. 분기점 접근은 한 문장까지, 도어 열림이면 끝 |
+| `CautionZone` | 위험 구간 판단: 내비가 알려 준 위험 지점(13종) · 어린이 보호구역 카메라(2종)가 300m 안이면 멈춤, 지난 뒤 300m(속도를 모르면 20초) 더, 위험 지점 신호가 15초 안 오면 풀림. 과속방지턱·단속 카메라 등 10종은 보지 않음 |
 
 - 엔진은 `DocentEngine` 한 곳에서 부르고, 차량 신호는 `VehicleSignalSource`로 들어옴: 기본은 프로토타입 신호 판을 읽는 `PrototypeSignalSource`, 화면의 '차량 신호'를 켜면 Pleos Connect SDK에서 받는 `PleosSignalSource`
 - 임계값(조향각, 분기점 거리, 정차 속도, 경로 폭, 해설 길이)은 `DocentConfig` 설정값으로 분리
@@ -88,6 +90,8 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 | Vehicle - Seat | `registerSeatOccupancy` | 모드 자동 전환, 퀴즈 참여 인원 | 코드 연결 |
 | Vehicle - Door | `registerDoorPosition` | 하차 시점 여행 기록·QR | 코드 연결 |
 | NaviHelper | `onTBTInfo`(다음 안내 종류·거리), `onNavigationStatus` | 분기점 접근 판단 | 코드 연결 |
+| NaviHelper | `onCautionPointInfo`(CautionPoint 종류·남은 거리), `onCameraAlert`(CameraAlert 종류·남은 거리) | 위험 구간 멈춤 | 코드 연결 (남은 거리 단위는 미터로 봄 · 에뮬레이터 확인 전) |
+| NaviHelper | `onDestinationArrived`, `onWayPointArrived` | 도착 때 못 한 이야기 제안 | 코드 연결 |
 | NaviHelper | `onDrivingInfo`(남은 거리·시간), `addWaypoint` | 해설 길이, "가자" 경유지 추가 | 계획 |
 | FusedLocation | `registerFusedLocationCallback`(위치) | 속도 계산(Vehicle SDK에 차속 없음), 정차 판단 | 코드 연결 |
 | FusedLocation | `addProximityAlert` | 명소 반경 진입 | 계획 |
@@ -105,6 +109,8 @@ gradle :app:assembleRelease     # app/build/outputs/apk/release/app-release.apk
 - 시연 영상: [docs/demo.webm](docs/demo.webm) (약 1분, 무음, 시나리오: 가족 여행 서울→담양)
 - 해설은 소리로도 나옴('소리 켬/끔' 단추 · 브라우저 음성). 자동 시연의 분기점 장면에서 내비 음성이 나오면 말하던 해설이 바로 끊기고, 지나간 뒤 "아까 하던 이야기 이어서 할게요"와 함께 끊긴 문장부터 다시 말함
 - 신호 단추: 방향지시등·내비 음성·브레이크·속도·뒷좌석·승객 언어·도어로 판단이 바뀌는 것을 확인, '사실 검증'은 틀린 연도가 든 초안이 사실 원문으로 바뀌는 것을 보여 줌
+- '위험 구간': 어린이 보호구역 200m 앞을 켜고 끔. 켜면 해설이 바로 멈추고 내비 칸에 위험 지점이 보임, 끄면 이어 말함 (자동 시연 장면은 그대로)
+- 못 한 이야기: 같은 문장이 두 번 끊기면(방향지시등을 두 번 켰다 끔) 그 문장은 넘어가고, 정차 5초가 지나면 "아까 못 한 이야기가 1개 있어요. 지금 들려드릴까요?"를 묻고 '🎤 응' '🎤 나중에'(음성 명령 흉내) 단추가 나옴
 - '차량 신호': 앱에서 누르면 Pleos SDK 신호로 판단하고 신호 판에 실제 값과 모듈별 연결 상태(차량·내비·위치·안내 음성)를 보여 줌. 브라우저나 Pleos 기기가 아닌 곳에서는 안내 글을 띄우고 시연 신호를 그대로 씀
 
 ## 구조
@@ -118,7 +124,8 @@ app/src/main/java/com/windowdocent/
     NarrationGate.kt         운전 상황별 해설 방식
     Audience.kt              운전자·가족·외국어 모드
     FactGuard.kt             사실 필드 밖 숫자 차단
-    Narrator.kt              해설을 문장마다 말하고 멈춤·이어 말하기
+    Narrator.kt              해설을 문장마다 말하고 멈춤·이어 말하기·못 한 이야기
+    CautionZone.kt           위험 구간 판단 (300m 앞 · 지난 뒤 300m · 15초)
     VehicleSignalSource.kt   신호 공급원 인터페이스
     PrototypeSignalSource.kt 프로토타입 신호 판을 읽는 공급원 (기본)
     SignalBoard.kt           따로 오는 차량 신호를 모아 한 벌로 (실제 신호 공급원 LiveSignalSource)

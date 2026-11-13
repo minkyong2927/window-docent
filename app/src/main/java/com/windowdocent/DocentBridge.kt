@@ -16,7 +16,7 @@ import org.json.JSONObject
 /**
  * 프로토타입 화면(WebView) ↔ Kotlin 엔진 다리. 화면은 JSON 문자열만 주고받고, 판단은 전부 DocentEngine 이 함.
  * 화면에서는 window.Docent 로 보임: Docent.evaluate(...) · Docent.plan(...) · Docent.narrate(...) · Docent.live(...) · Docent.liveState(...)
- *   · Docent.speak(...) · Docent.voiceState(...) · Docent.voiceStop(...)
+ *   · Docent.speak(...) · Docent.voiceState(...) · Docent.voiceStop(...) · Docent.voiceAnswer(...)
  *
  * 신호는 기본이 화면의 시연용 신호 판(PrototypeSignalSource). 화면에서 「차량 신호」 를 켜면 실제 차량 신호(LiveSignalSource ·
  * 앱에서는 Pleos SDK 의 PleosSignalSource)로 바꾸고, 끄면 시연 신호로 돌아감.
@@ -41,6 +41,7 @@ class DocentBridge(
 
     @Volatile
     private var liveOn = false
+    private var wasArrived = false
 
     init {
         engine.attach(source)
@@ -48,7 +49,7 @@ class DocentBridge(
 
     /**
      * 신호 판 상태 S → 지금 어떻게 · 누구에게 말할지.
-     * 입력 {"turn","steer","speed","brake","nav","navDist","door","rear","front","lang"}
+     * 입력 {"turn","steer","speed","brake","nav","navDist","door","rear","front","lang","caution","cautionDist","arrived"}
      * (차량 신호가 켜져 있으면 신호는 실제 값을 쓰고 S 에서는 승객 언어 lang 만 씀)
      * 출력 {"level":0~3,"mode","reason","audience","language"}
      */
@@ -59,8 +60,11 @@ class DocentBridge(
         if (liveOn && current != null) current.refresh() else source.push(state)
         engine.guestLanguage = state["lang"] as? String
         val d = engine.decide()
-        // 해설 방식이 바뀌면 말하던 해설을 멈추거나 이어 감
+        // 해설 방식이 바뀌면 말하던 해설을 멈추거나 이어 감 · 막 도착했으면 못 한 이야기를 제안
         narrator?.onMode(d.mode)
+        val arrived = engine.signals.arrived
+        if (arrived && !wasArrived) narrator?.arrived()
+        wasArrived = arrived
         return JSONObject()
             .put("level", d.mode.level)
             .put("mode", d.mode.name)
@@ -122,6 +126,9 @@ class DocentBridge(
             })
             .put("navDist", s.navDistanceM?.let { Math.round(it) } ?: JSONObject.NULL)
             .put("door", s.doorOpen)
+            .put("caution", s.cautionZone ?: JSONObject.NULL)
+            .put("cautionDist", if (s.cautionZone != null) 0 else JSONObject.NULL)
+            .put("arrived", s.arrived)
             .put("rear", seats.rearCount)
             .put("front", seats.frontPassenger)
         return JSONObject()
@@ -150,14 +157,19 @@ class DocentBridge(
 
     /**
      * 지금 해설을 어디까지 말했는지.
-     * 출력 {"available","device","id","title","state","index","total","speaking","error","lines":[{"t","cut","resume"}]}
+     * 출력 {"available","device","id","title","state","index","total","speaking","error","awaiting",
+     *   "lines":[{"t","cut","resume"}],"missed":[{"id","title","sentences":[…]}]}
      */
     @JavascriptInterface
     fun voiceState(@Suppress("UNUSED_PARAMETER") requestJson: String): String {
         val out = JSONObject().put("available", narrator != null).put("device", speakerName())
-        val s = narrator?.snapshot() ?: return out.toString()
+        val n = narrator ?: return out.toString()
+        n.tick()
+        val s = n.snapshot()
         val lines = JSONArray()
         for (line in s.lines) lines.put(JSONObject().put("t", line.text).put("cut", line.cut).put("resume", line.resume))
+        val missed = JSONArray()
+        for (m in s.missed) missed.put(JSONObject().put("id", m.storyId).put("title", m.title).put("sentences", JSONArray(m.sentences)))
         return out
             .put("id", s.storyId ?: JSONObject.NULL)
             .put("title", s.title ?: JSONObject.NULL)
@@ -166,8 +178,17 @@ class DocentBridge(
             .put("total", s.total)
             .put("speaking", s.speaking ?: JSONObject.NULL)
             .put("error", s.error ?: JSONObject.NULL)
+            .put("awaiting", s.awaitingAnswer)
             .put("lines", lines)
+            .put("missed", missed)
             .toString()
+    }
+
+    /** 「아까 못 한 이야기가 n개 있어요. 지금 들려드릴까요?」 에 대한 대답. 입력 {"yes":true|false} (음성 명령 · 시연은 흉내 단추) */
+    @JavascriptInterface
+    fun voiceAnswer(requestJson: String): String {
+        narrator?.answer(JSONObject(requestJson).optBoolean("yes", false))
+        return voiceState("{}")
     }
 
     /** 해설을 그만둠 */

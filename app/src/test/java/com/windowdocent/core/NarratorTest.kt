@@ -40,8 +40,9 @@ class NarratorTest {
         }
     }
 
+    private var now = 0L
     private val speaker = FakeSpeaker()
-    private val narrator = Narrator(speaker)
+    private val narrator = Narrator(speaker, clock = { now })
     private val story = Narrator.Story("gyeryong", "계룡산", listOf("첫 문장이에요.", "둘째 문장이에요.", "셋째 문장이에요."))
 
     @Test fun speaksSentenceBySentence() {
@@ -192,5 +193,108 @@ class NarratorTest {
         )
         assertEquals(listOf("계룡산 이름에 숨어 있는 동물 두 마리는 뭘까요?"), Narrator.split(" 계룡산 이름에 숨어 있는 동물 두 마리는 뭘까요? "))
         assertTrue(Narrator.split("  ").isEmpty())
+    }
+
+    // ── 다시 말하기 · 못 한 이야기 (추가 3) ─────────────────────────────────────
+
+    @Test fun secondCutOfTheSameSentenceSkipsToTheNext() {
+        narrator.play(story)
+        speaker.finish()                                   // 둘째 문장 말하는 중
+        narrator.onMode(NarrationMode.HOLD)                // 한 번 끊김
+        narrator.onMode(NarrationMode.NARRATE)
+        speaker.finish()                                   // 한마디 끝 · 둘째 문장 다시
+        narrator.onMode(NarrationMode.HOLD)                // 같은 문장이 또 끊김
+        narrator.onMode(NarrationMode.NARRATE)
+        assertEquals(Narrator.RESUME_LINE, speaker.said.last())
+        speaker.finish()
+        assertEquals("셋째 문장이에요.", speaker.said.last())   // 둘째는 또 말하지 않음
+        assertEquals(listOf("둘째 문장이에요."), narrator.snapshot().missed.single().sentences)
+    }
+
+    @Test fun lastSentenceCutTwiceEndsWithoutResumeLine() {
+        val n = Narrator(speaker)
+        n.play(Narrator.Story("one", "한 문장", listOf("하나뿐이에요.")))
+        n.onMode(NarrationMode.HOLD); n.onMode(NarrationMode.NARRATE); speaker.finish()
+        n.onMode(NarrationMode.HOLD); n.onMode(NarrationMode.NARRATE)
+        assertEquals(Narrator.State.DONE, n.snapshot().state)
+        assertEquals(listOf("하나뿐이에요.", Narrator.RESUME_LINE, "하나뿐이에요."), speaker.said)
+    }
+
+    @Test fun storyReplacedWhileHeldKeepsTheRestAsMissed() {
+        narrator.play(story)
+        speaker.finish()
+        narrator.onMode(NarrationMode.HOLD)                // 둘째 문장에서 멈춘 채 다음 명소로
+        narrator.play(Narrator.Story("next", "다음 명소", listOf("다음 이야기예요.")))
+        val m = narrator.snapshot().missed.single()
+        assertEquals("gyeryong", m.storyId)
+        assertEquals(listOf("둘째 문장이에요.", "셋째 문장이에요."), m.sentences)
+    }
+
+    @Test fun nothingMissedNeverOffers() {
+        narrator.play(story)
+        repeat(3) { speaker.finish() }
+        narrator.onMode(NarrationMode.LONG_STORY)
+        now = 10_000
+        narrator.tick()
+        narrator.arrived()
+        assertEquals(3, speaker.said.size)
+        assertEquals(false, narrator.snapshot().awaitingAnswer)
+    }
+
+    @Test fun stoppedFiveSecondsOffersOnceAndYesPlaysTheMissed() {
+        missOneSentence()
+        val before = speaker.said.size
+        narrator.onMode(NarrationMode.LONG_STORY)          // 정차
+        now += 4_000; narrator.tick()
+        assertEquals(before, speaker.said.size)            // 5초 전에는 묻지 않음
+        now += 1_500; narrator.tick()
+        assertEquals(Narrator.offerLine(1), speaker.said.last())
+        speaker.finish()
+        assertTrue(narrator.snapshot().awaitingAnswer)
+        now += 30_000; narrator.tick()                     // 같은 정차에서 또 묻지 않음
+        assertEquals(before + 1, speaker.said.size)
+        narrator.answer(true)                              // 응 · 들려줘
+        assertEquals("둘째 문장이에요.", speaker.said.last())
+        assertTrue(narrator.snapshot().missed.isEmpty())
+    }
+
+    @Test fun laterThenArrivalAsksOnceMore() {
+        missOneSentence()
+        narrator.onMode(NarrationMode.LONG_STORY)
+        now += 6_000; narrator.tick()
+        speaker.finish()
+        narrator.answer(false)                             // 나중에
+        assertEquals(1, narrator.snapshot().missed.size)
+        narrator.onMode(NarrationMode.NARRATE)
+        narrator.onMode(NarrationMode.LONG_STORY)
+        now += 10_000; narrator.tick()                     // 다른 정차: 정차 제안은 한 번뿐
+        assertEquals(1, speaker.said.count { it == Narrator.offerLine(1) })
+        narrator.onMode(NarrationMode.TRIP_RECORD)         // 도어 열림이어도 도착 제안은 말함
+        narrator.arrived()
+        assertEquals(2, speaker.said.count { it == Narrator.offerLine(1) })
+        narrator.arrived()                                 // 도착 제안도 한 번
+        assertEquals(2, speaker.said.count { it == Narrator.offerLine(1) })
+    }
+
+    @Test fun doorOpenWhileHeldKeepsTheRestButWhileSpeakingDoesNot() {
+        narrator.play(story)
+        narrator.onMode(NarrationMode.TRIP_RECORD)         // 말하던 중 도어 열림: 못 한 이야기 아님
+        assertTrue(narrator.snapshot().missed.isEmpty())
+        narrator.onMode(NarrationMode.NARRATE)
+        narrator.play(story)
+        speaker.finish()
+        narrator.onMode(NarrationMode.HOLD)                // 멈춘 채 도착해 도어 열림: 남은 문장은 못 한 이야기
+        narrator.onMode(NarrationMode.TRIP_RECORD)
+        assertEquals(listOf("둘째 문장이에요.", "셋째 문장이에요."), narrator.snapshot().missed.single().sentences)
+    }
+
+    /** 둘째 문장을 두 번 끊어 못 한 이야기 하나를 만들고 해설을 끝냄 */
+    private fun missOneSentence() {
+        narrator.play(story)
+        speaker.finish()
+        narrator.onMode(NarrationMode.HOLD); narrator.onMode(NarrationMode.NARRATE); speaker.finish()
+        narrator.onMode(NarrationMode.HOLD); narrator.onMode(NarrationMode.NARRATE); speaker.finish()
+        speaker.finish()                                   // 셋째 문장 끝
+        assertEquals(Narrator.State.DONE, narrator.snapshot().state)
     }
 }
