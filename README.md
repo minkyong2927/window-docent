@@ -100,7 +100,7 @@ gradle :app:assembleRelease
 |---|---|---|---|---|
 | 1 | 명소 고르기와 해설 시작 | 지나갈 명소를 미리 골라 둠 | 내비 목적지, 현재 위치 | RoutePoiPlanner.kt, NarrationSchedule.kt |
 | 2 | 언제 어떻게 말할지 | 운전 상황에 맞춰 말함 | 깜빡이, 핸들, 내비 안내, 위험 구간, 속도 | NarrationGate.kt, CautionZone.kt |
-| 3 | 멈췄다 이어 말하기 | 끊긴 이야기는 이어서 말함 | 깜빡이, 핸들, 브레이크, 도착 알림 | Narrator.kt |
+| 3 | 멈췄다 이어 말하기 | 끊긴 이야기는 이어서 말함 | 깜빡이, 핸들, 내비 안내, 위험 구간, 정차, 도착 | Narrator.kt |
 | 4 | 듣는 사람에 맞추기 | 탄 사람에 맞춰 말함 | 좌석에 앉은 사람, 승객 언어 | Audience.kt |
 | 5 | 들러볼 곳 제안 | 가는 길의 행사를 알려 줌 | 내비 경로, 음성 인식 | DocentBridge.kt, VoiceCommand.kt |
 | 6 | 가족 퀴즈 | 들은 이야기로 퀴즈를 냄 | 뒷좌석 착석, 음성 인식 | Quiz.kt |
