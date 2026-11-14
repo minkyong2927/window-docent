@@ -635,6 +635,8 @@ class DocentBridgeTest {
         val speaker = FakeSpeaker()
         val bridge = DocentBridge(speaker = speaker, recordSink = { saved += it })
         bridge.evaluate(state())
+        bridge.schedule(demoScheduleRequest().toString())
+        bridge.speak("""{"id":"d1","title":"해설","text":"오늘 이야기를 준비했어요."}""")   // 일반 글은 기록에 안 남음
         bridge.speak("""{"id":"cheonan","title":"천안삼거리","text":"첫 문장이에요."}""")
         bridge.suggest(juknok)
         bridge.command("""{"text":"가자"}""")
@@ -705,5 +707,33 @@ class DocentBridgeTest {
         assertTrue(v.getJSONObject("heard").getJSONObject("quiz").getBoolean("ok"))
         assertEquals("en:Correct!", speaker.said.last())
         bridge.learn("""{"lang":null}""")
+    }
+
+    // ── Gleo Interface (제공 4 · 마-12) ─────────────────────────────────────────────
+    @Test fun gleoParamsAcceptPlainAndQuotedJson() {
+        assertEquals("en", DocentBridge.gleoParams("""{"language":"en"}""").getString("language"))
+        assertEquals("es", DocentBridge.gleoParams("\"{\\\"language\\\":\\\"es\\\"}\"").getString("language"))
+        assertEquals(0, DocentBridge.gleoParams(null).length())
+        assertEquals(0, DocentBridge.gleoParams("not json").length())
+    }
+
+    @Test fun gleoActionsRunTheSameWayAsVoiceCommands() {
+        val speaker = FakeSpeaker()
+        val live = FakeLive()
+        val bridge = DocentBridge(liveFactory = { live }, speaker = speaker)
+        bridge.live("""{"on":true}""")
+        assertEquals("failure", bridge.gleoAction("ADD_SUGGESTED_STOP", JSONObject()).getString("status"))   // 제안이 없으면
+        bridge.suggest(juknok)
+        val r = bridge.gleoAction("ADD_SUGGESTED_STOP", JSONObject())
+        assertEquals("success", r.getString("status"))
+        assertEquals(listOf("juknok"), live.waypoints.map { it.id })
+        bridge.speak("""{"id":"a","text":"첫 문장이에요. 둘째 문장이에요."}""")
+        assertEquals("success", bridge.gleoAction("REPEAT_DOCENT_STORY", JSONObject()).getString("status"))
+        assertEquals("ko:첫 문장이에요.", speaker.said.last())
+        bridge.gleoAction("SET_STUDY_LANGUAGE", JSONObject().put("language", "es"))
+        assertEquals("es", JSONObject(bridge.voiceState("{}")).getString("learn"))
+        bridge.gleoAction("SET_STUDY_LANGUAGE", JSONObject().put("language", "off"))
+        assertTrue(JSONObject(bridge.voiceState("{}")).isNull("learn"))
+        assertEquals("failure", bridge.gleoAction("UNKNOWN", JSONObject()).getString("status"))
     }
 }

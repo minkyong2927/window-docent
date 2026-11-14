@@ -222,7 +222,8 @@ class DocentBridge(
         val req = toMap(JSONObject(requestJson))
         val sentences = list(req["sentences"]).filterIsInstance<String>().ifEmpty { Narrator.split(req["text"] as? String ?: "") }
         val id = req["id"] as? String ?: "story"
-        trip.heard(id, req["title"] as? String ?: id)
+        // 여행 기록에는 경로의 명소만 (화면의 안내 · 퀴즈 같은 일반 글은 빼고)
+        if (schedulePois.any { it.id == id }) trip.heard(id, req["title"] as? String ?: id)
         n.onMode(engine.decide().mode)
         n.play(Narrator.Story(id, req["title"] as? String ?: id, sentences, req["lang"] as? String ?: "ko"))
         return voiceState("{}")
@@ -254,6 +255,7 @@ class DocentBridge(
         }
         out.put("listening", listening).put("canListen", voiceInput != null).put("heard", heard ?: JSONObject.NULL)
         out.put("suggesting", suggestion?.id ?: JSONObject.NULL).put("waypoint", waypoint ?: JSONObject.NULL)
+        out.put("learn", learnLang ?: JSONObject.NULL)
         out.put("quiz", JSONObject().put("asking", quiz.current?.id ?: JSONObject.NULL).put("asked", quiz.asked).put("right", quiz.right))
         val s = n?.snapshot() ?: return out.toString()
         val lines = JSONArray()
@@ -620,6 +622,32 @@ class DocentBridge(
         return JSONObject().put("navi", navi).toString()
     }
 
+    /**
+     * Gleo Interface (assets/schema.json): Gleo AI 가 음성 명령으로 부른 function 을 실행하고 결과 {status, message} 를 돌려줌.
+     * 다시 말하기 · 가자는 들은 말과 같은 길(handleCommand)로 가서 화면도 같이 바뀜
+     */
+    fun gleoAction(name: String, params: JSONObject): JSONObject {
+        val ok = when (name) {
+            "REPEAT_DOCENT_STORY" -> { handleCommand("다시"); heard?.optBoolean("done") == true }
+            "ADD_SUGGESTED_STOP" -> { handleCommand("가자"); heard?.optBoolean("done") == true }
+            "SET_STUDY_LANGUAGE" -> {
+                val lang = params.optString("language")
+                learn(JSONObject().put("lang", if (lang == "en" || lang == "es") lang else JSONObject.NULL).toString())
+                true
+            }
+            else -> false
+        }
+        val message = when {
+            !ok && name == "REPEAT_DOCENT_STORY" -> "There is no recent story to repeat."
+            !ok && name == "ADD_SUGGESTED_STOP" -> "No stop has been suggested yet."
+            !ok -> "Unknown function."
+            name == "ADD_SUGGESTED_STOP" -> "Added the suggested stop. Navigation: " + (waypoint?.optString("navi") ?: "")
+            name == "SET_STUDY_LANGUAGE" -> "Learning mode: " + (learnLang ?: "off")
+            else -> "Repeating the story."
+        }
+        return JSONObject().put("status", if (ok) "success" else "failure").put("message", message)
+    }
+
     /** 화면을 닫을 때 신호 공급원 · 말하는 장치를 멈춤 */
     fun close() {
         liveOn = false
@@ -672,7 +700,7 @@ class DocentBridge(
             .toString()
     }
 
-    private companion object {
+    companion object {
         const val DEFAULT_SPEED_KMH = 80.0
         /** 지나친 곳 한 줄은 그곳을 지나 이 거리 안에서만 (m) */
         const val PASSED_WITHIN_M = 3000.0
@@ -682,6 +710,16 @@ class DocentBridge(
         const val SUGGEST_SUFFIX = ":suggest"
         /** 퀴즈 문제의 이야기 id 꼬리 */
         const val QUIZ_SUFFIX = ":quiz"
+
+        /** Gleo Interface function 셋 (assets/schema.json · 매니페스트 intent-filter 와 같음) */
+        val GLEO_ACTIONS = setOf("REPEAT_DOCENT_STORY", "ADD_SUGGESTED_STOP", "SET_STUDY_LANGUAGE")
+
+        /** Gleo 의 ACTION_PARAM: JSON 글 (따옴표로 한 번 더 감싼 꼴도 받음) */
+        fun gleoParams(raw: String?): JSONObject {
+            var s = raw?.trim() ?: return JSONObject()
+            if (s.length >= 2 && s.startsWith("\"") && s.endsWith("\"")) s = s.substring(1, s.length - 1).replace("\\\"", "\"")
+            return try { JSONObject(s) } catch (_: Exception) { JSONObject() }
+        }
 
         /** 한국어 한마디 한 문장 (승객 언어로 뜻을 붙임) */
         fun phraseLine(p: Map<*, *>?, lang: String): String? {

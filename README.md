@@ -30,7 +30,7 @@ gradle :app:assembleRelease
 | 가속 | WHPX |
 | 도구 | adb 37.0.1, 에뮬레이터 37.2.13, 가상 콘솔 |
 | 빌드 | GitHub Actions, JDK 17 |
-| 단위 테스트 | JVM 에서 169개, 차량 없이 돎 |
+| 단위 테스트 | JVM 에서 171개, 차량 없이 돎 |
 
 ## 3. 필요한 설정
 
@@ -90,6 +90,26 @@ gradle :app:assembleRelease
 | 데이터 1, 2 관광지 자료 미리 저장, 미리 쓴 문장과 사실 검증 | 완료, TourAPI 연동은 2차 | sample-data 외 1 |
 | 4 음성 명령, 다시 말하기 | 완료, 마이크 확인 전 | VoiceCommand.kt 외 1 |
 
+## 주요 로직 순서도
+
+왼쪽에서 오른쪽으로 읽습니다. 그림을 누르면 크게 보입니다.
+
+![창밖 도슨트 주요 로직 순서도](docs/logic-flow.png)
+
+| 번호 | 로직 | 하는 일 | 차에서 받는 정보 | 코드 |
+|---|---|---|---|---|
+| 1 | 명소 고르기와 해설 시작 | 지나갈 명소를 미리 골라 둠 | 내비 목적지, 현재 위치 | RoutePoiPlanner.kt, NarrationSchedule.kt |
+| 2 | 언제 어떻게 말할지 | 운전 상황에 맞춰 말함 | 깜빡이, 핸들, 내비 안내, 위험 구간, 속도 | NarrationGate.kt, CautionZone.kt |
+| 3 | 멈췄다 이어 말하기 | 끊긴 이야기는 이어서 말함 | 깜빡이, 핸들, 브레이크, 도착 알림 | Narrator.kt |
+| 4 | 듣는 사람에 맞추기 | 탄 사람에 맞춰 말함 | 좌석에 앉은 사람, 승객 언어 | Audience.kt |
+| 5 | 들러볼 곳 제안 | 가는 길의 행사를 알려 줌 | 내비 경로, 음성 인식 | DocentBridge.kt, VoiceCommand.kt |
+| 6 | 가족 퀴즈 | 들은 이야기로 퀴즈를 냄 | 뒷좌석 착석, 음성 인식 | Quiz.kt |
+| 7 | 학습 모드 | 공부하는 언어로 듣고 복습 | 음성 출력, 음성 인식 | DocentBridge.kt |
+| 8 | 사실 검증 | 자료에 없는 숫자는 말하지 않음 | 앱 안 명소 자료 | FactGuard.kt |
+| 9 | 여행 기록 | 내릴 때 오늘 여행을 남김 | 문 열림 | TripRecord.kt |
+
+- 칸 종류 넷: 상황, 앱의 판단, 앱이 하는 일, 탑승자가 듣고 보는 것
+
 ## 사용한 데이터
 
 | 자료 | 쓰는 곳 |
@@ -125,6 +145,7 @@ gradle :app:assembleRelease
 | FusedLocation 1.1.3 | 위치 | 속도, 해설 시작 | 에뮬레이터 |
 | TextToSpeech 3.3.1 | speak, stop, setLocale | 해설 음성, 기기 안 방식 | 에뮬레이터 |
 | SpeechToText 3.3.1 | request, stop, setLocale | 음성 명령, 기기 안 방식 | 요청까지 |
+| Gleo Interface | assets/schema.json 함수 셋, 다시 말하기, 들러볼 곳 경유지, 학습 언어 | Gleo AI 음성 명령으로 앱 기능 | 앱 안 처리 확인, Gleo 검토 전 |
 | 차량 제어 | 쓰지 않음 | | |
 
 - Pleos 문서에 없는 안드로이드 기능 둘, 내비 안내 음성 감지와 Pleos 음성이 없는 기기의 안드로이드 TTS
@@ -159,7 +180,7 @@ gradle :app:assembleRelease
 - 학습 모드 단추로 해설을 영어나 스페인어로 듣고 곳마다 복습 퀴즈
 - 다시, 응, 나중에 단추는 음성 명령 흉내, 말하기 단추는 앱에서만 듣기
 - 차량 신호 단추는 앱에서 Pleos SDK 값으로 판단
-- 시연 영상 docs/demo.webm, 무음, 새 화면으로 다시 찍을 예정
+- 시연 영상 docs/demo.mp4, 에뮬레이터 화면 녹화, 소리 없음
 
 ## 파일
 
@@ -171,8 +192,8 @@ gradle :app:assembleRelease
 | 단위 테스트 | app/src/test | 대상 하나에 테스트 하나 |
 | 화면 | prototype | 웹 프로토타입, 앱 화면으로도 씀, QR 그리기 qr.js |
 | 글꼴 | prototype/fonts | Pretendard |
-| 빌드 설정 | 맨 위, app, .github | Gradle, 매니페스트, Actions |
-| 문서와 제출물 | README, docs, apk | 시연 영상, APK |
+| 빌드 설정 | 맨 위, app, .github | Gradle, 매니페스트, Actions, Gleo schema.json |
+| 문서와 제출물 | README, docs, apk | 시연 영상, 순서도 그림, APK |
 | 임의 자료 | sample-data | 시연 경로와 명소 |
 
 ## 팀 역할

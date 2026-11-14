@@ -2,6 +2,7 @@ package com.windowdocent
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
@@ -58,6 +59,32 @@ class MainActivity : Activity() {
         WebView.setWebContentsDebuggingEnabled(true)
         setContentView(web)
         web.loadUrl("file:///android_asset/index.html")
+        handleGleo(intent)
+    }
+
+    // 화면이 하나(singleTask)라 Gleo AI 가 다시 부르면 여기로 옴
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleGleo(intent)
+    }
+
+    /** Gleo Interface: Gleo AI 가 보낸 function(action) 과 ACTION_PARAM(JSON) 을 브리지에 넘기고 결과를 Gleo 에 알림 */
+    private fun handleGleo(intent: Intent?) {
+        val action = intent?.action ?: return
+        if (action !in DocentBridge.GLEO_ACTIONS) return
+        val result = try {
+            bridge.gleoAction(action, DocentBridge.gleoParams(intent.getStringExtra("ACTION_PARAM")))
+        } catch (t: Throwable) {
+            Log.w(TAG, "Gleo action 실패", t)
+            org.json.JSONObject().put("status", "failure").put("message", t.javaClass.simpleName)
+        }
+        try {
+            val response = org.json.JSONObject().put("functionName", action).put("status", result.optString("status")).put("message", result.optString("message"))
+            sendBroadcast(Intent("ai.pleos.playground.intent.action.APP_ACTION_RESPONSE").putExtra("packageName", packageName).putExtra("response", response.toString()))
+        } catch (t: Throwable) {
+            Log.w(TAG, "Gleo 응답 실패", t)
+        }
     }
 
     /** 여행 기록을 기기 안 파일(앱 전용 폴더 trip-record.json)에 저장 · 마지막 한 벌 */

@@ -1,0 +1,41 @@
+{
+  "packageName": "com.windowdocent",
+  "appDescription": "An in-car voice docent that tells short stories about places along the navigation route and pauses while the driver needs to focus.",
+  "invokeWord": "도슨트",
+  "version": "0.8.0",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "REPEAT_DOCENT_STORY",
+        "description": "Repeat the sentence of the place story that the docent is telling or has just finished telling.",
+        "parameters": { "type": "object", "properties": {}, "required": [] },
+        "component": "activity"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "ADD_SUGGESTED_STOP",
+        "description": "Add the place that the docent has just suggested to visit as a waypoint of the current navigation route.",
+        "parameters": { "type": "object", "properties": {}, "required": [] },
+        "component": "activity"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "SET_STUDY_LANGUAGE",
+        "description": "Turn on learning mode so the docent tells the place stories in the language the user is studying and asks a short review quiz, or turn it off.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "language": { "type": "string", "description": "The language the user is studying, or off to stop learning mode.", "enum": ["en", "es", "off"] }
+          },
+          "required": ["language"]
+        },
+        "component": "activity"
+      }
+    }
+  ]
+}

@@ -905,6 +905,10 @@ function voiceTick(){
   if (learnReview(v)) return;
   document.body.classList.toggle('ask', !!v.awaiting);
   if (v.heard && v.heard.atMs && v.heard.atMs !== VOICE.heardAt) showHeard(v.heard, v.waypoint);
+  if (VOICE.app && 'learn' in v && (v.learn || null) !== (S.learn || null)) {   // Gleo 음성 명령으로 학습 모드가 바뀌면 단추도 맞춤
+    S.learn = v.learn || null;
+    $('btnLearn').textContent = S.learn ? '학습 · ' + LEARN_NAME[S.learn] : '학습 모드'; $('btnLearn').classList.toggle('on', !!S.learn);
+  }
   if (v.id && (v.id === 'offer' || v.id === 'missed')) $('db').classList.remove('hidden');   // 도착 · 정차 때 제안은 해설 글 상자에
   if ($('db').classList.contains('hidden')) return;
   if (v.id !== VOICE.id) { VOICE.id = v.id; VOICE.seen = []; VOICE.quiz = VOICE.nextQuiz; VOICE.nextQuiz = false; }

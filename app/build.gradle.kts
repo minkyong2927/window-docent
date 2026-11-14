@@ -11,8 +11,8 @@ android {
         applicationId = "com.windowdocent"
         minSdk = 29
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.7.1"
+        versionCode = 9
+        versionName = "0.8.0"
     }
 
     // CI에서 만든 서명키를 환경변수로 받음. 없으면(로컬) debug 키로 서명.
@@ -38,7 +38,8 @@ android {
 
     // 웹 프로토타입(prototype/index.html)을 그대로 앱 화면으로 씀
     // 임의 자료(sample-data/)도 같은 assets 맨 위에 (화면이 scenario-a.js 를 읽음)
-    sourceSets["main"].assets.srcDirs("../prototype", "../sample-data")
+    // Gleo Interface 의 assets/schema.json 은 src/main/assets 에
+    sourceSets["main"].assets.srcDirs("../prototype", "../sample-data", "src/main/assets")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

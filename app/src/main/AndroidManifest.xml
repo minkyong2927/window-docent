@@ -34,6 +34,13 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <!-- Gleo Interface (assets/schema.json 의 function 셋): Gleo AI 가 음성 명령으로 이 화면을 부름 -->
+            <intent-filter>
+                <action android:name="REPEAT_DOCENT_STORY" />
+                <action android:name="ADD_SUGGESTED_STOP" />
+                <action android:name="SET_STUDY_LANGUAGE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
