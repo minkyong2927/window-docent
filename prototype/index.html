@@ -128,6 +128,7 @@
   .record h2{font-size:30px}
   .record .sub{font-size:19px;color:var(--sub)}
   .recqr{position:absolute;right:32px;top:24px;text-align:center;font-size:15px;color:var(--sub)}
+  .record .stats,.record .plist{margin-right:176px}   /* QR 자리를 비워 둠 (넷째 숫자 칸과 안 겹치게) */
   .recqr svg{display:block;border-radius:8px;margin-bottom:6px}
   .stats{display:flex;gap:16px}
   .stat{flex:1;background:var(--panel2);border-radius:16px;padding:16px 20px}
@@ -526,12 +527,13 @@ function learnToggle(){
   $('btnLearn').classList.toggle('on', !!S.learn);
   cap(S.learn ? '학습 모드 · 해설을 ' + LEARN_NAME[S.learn] + ' 로 듣고, 곳마다 그 언어로 복습 퀴즈' : '학습 모드를 껐습니다');
 }
-function learnReview(v){
+function learnReview(v){   // 복습 퀴즈를 냈으면 true (voiceTick 이 옛 상태로 퀴즈 꼬리표를 덮지 않게 바로 멈춤)
   if (VOICE.app || !S.learn || v.state !== 'DONE' || !v.id || !LEARN.heard[v.id] || LEARN.asked[v.id] || LQUIZ.current) return;
   const q = ((STORIES.learn || {})[v.id] || {})[S.learn]; if (!q) return;
   LEARN.asked[v.id] = 1;
   LQUIZ.current = Object.assign({ id: v.id, lang: S.learn }, q); LQUIZ.asked++; quizScore();
   doc(q.question, true, v.id + ':quiz', S.learn);
+  return true;
 }
 function askQuiz(id){
   const q = (STORIES.quiz || {})[id]; if (!q) return false;
@@ -900,7 +902,7 @@ function doc(text, quiz=false, id=null, lang='ko'){
 // 말한 줄을 화면에: 앞 줄은 다, 지금 줄은 말하는 만큼(글자당 45ms), 끊긴 줄은 끊긴 데까지 + ' —'
 function voiceTick(){
   const v = voiceState(), lines = v.lines || [], now = Date.now();
-  learnReview(v);
+  if (learnReview(v)) return;
   document.body.classList.toggle('ask', !!v.awaiting);
   if (v.heard && v.heard.atMs && v.heard.atMs !== VOICE.heardAt) showHeard(v.heard, v.waypoint);
   if (v.id && (v.id === 'offer' || v.id === 'missed')) $('db').classList.remove('hidden');   // 도착 · 정차 때 제안은 해설 글 상자에
@@ -967,7 +969,7 @@ async function scenario(){
   cap('내비 경로를 미리 읽어, 곧 보일 명소를 골라 둡니다');
   stop('cheonan', 'done'); stop('gyeryong', 'now');
   place('⛰', '계룡산', '오른쪽 · 약 6km'); car(300, 470);
-  doc('오른쪽에 보이는 큰 산이 계룡산이에요. 산줄기가 닭 볏을 쓴 용처럼 생겼대요.');
+  doc('오른쪽에 보이는 큰 산이 계룡산이에요. 산줄기가 닭 볏을 쓴 용처럼 생겼대요.', false, 'gyeryong');   // 곳 id 를 붙여 여행 기록에 남김
   await wait(6000);
   askQuiz('gyeryong');      // 임의 자료 sample-data/stories.js quiz
   cap('직진 구간 = 여유. 아이가 말로 답하는 퀴즈를 냅니다');
