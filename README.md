@@ -61,14 +61,14 @@ gradle :app:assembleRelease
 | 가상 콘솔 값 | 문, 조향각, 방향지시등, 브레이크가 판단에 반영 |
 | 해설 음성 | Pleos TextToSpeech 로 끝까지, 첫 모델 읽기 약 15초 |
 | 음성 명령 | SpeechToText 요청까지, 마이크 인식은 확인 전 |
-| 내비 안내 | 연결됨, 경로가 없어 안내 값은 확인 전 |
+| 내비 안내 | 경로 요청, 경유지 추가, 안내 음성에 멈춤 확인, 주행 중 안내 값은 확인 전 |
 | 위치 | 에뮬레이터 위치를 옮기면 따라옴 |
 
 ## 5. APK 위치
 
 | 언제 | 위치 |
 |---|---|
-| 지금 | Actions 실행 결과의 release-apk, Releases |
+| 지금 | Actions 실행 결과의 release-apk, Releases 의 v0.1.0 은 옛 판 |
 | 제출 | apk/팀명_WindowDocent_release.apk, 팀명이 정해지면 |
 
 ## 구현 현황
@@ -89,7 +89,6 @@ gradle :app:assembleRelease
 | 기능 5 학습 모드, 공부할 언어 해설, 복습 퀴즈 | 완료 | DocentBridge.kt 외 1 |
 | 데이터 1, 2 관광지 자료 미리 저장, 미리 쓴 문장과 사실 검증 | 완료, TourAPI 연동은 2차 | sample-data 외 1 |
 | 4 음성 명령, 다시 말하기 | 완료, 마이크 확인 전 | VoiceCommand.kt 외 1 |
-| 5 ~ 8 경유지, 퀴즈, 기록과 QR, 외국어 | 진행 중 | |
 
 ## 사용한 데이터
 
