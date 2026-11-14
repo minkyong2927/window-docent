@@ -12,7 +12,7 @@ permissions:
 
 env:
   # 공모전 규정 파일명: 팀명_앱이름_release.apk (팀명 확정되면 여기만 바꿈)
-  TEAM_NAME: TEAM
+  TEAM_NAME: WindowDocent   # 임시 팀명 · 팀명이 정해지면 바꿈
   APP_NAME: WindowDocent
 
 jobs:

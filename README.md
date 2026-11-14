@@ -68,8 +68,10 @@ gradle :app:assembleRelease
 
 | 언제 | 위치 |
 |---|---|
-| 지금 | Actions 실행 결과의 release-apk, Releases 의 v0.1.0 은 옛 판 |
-| 제출 | apk/팀명_WindowDocent_release.apk, 팀명이 정해지면 |
+| 제출 | apk/WindowDocent_WindowDocent_release.apk, 0.8.0 |
+| 같은 판 | Actions 실행 결과의 release-apk, Releases 의 v0.1.0 은 옛 판 |
+
+- 팀명 자리는 임시로 WindowDocent, 팀명이 정해지면 파일 이름을 바꿈
 
 ## 구현 현황
 

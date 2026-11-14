@@ -211,7 +211,7 @@
           </div>
           <div class="reason" id="reason"></div>
         </div>
-        <div class="place" id="place"><div class="pin">⛰</div><div><div class="n" id="pname">계룡산</div><div class="s" id="psub">오른쪽 · 약 6km</div></div></div>
+        <div class="place" id="place"><div class="pin">⛰</div><div><div class="n" id="pname">계룡산</div><div class="s" id="psub">왼쪽 · 약 6km</div></div></div>
         <div class="talk">
           <div class="bubble doc hidden" id="db"><div class="who">도슨트 <span class="vstat" id="vstat"></span></div><div class="t" id="dt"></div></div>
           <div class="bubble kid hidden" id="kb"><div class="who"><span class="mic" id="mic"></span><span id="kwho">뒷좌석</span></div><div class="t" id="kt"></div></div>
@@ -972,8 +972,8 @@ async function scenario(){
 
   cap('내비 경로를 미리 읽어, 곧 보일 명소를 골라 둡니다');
   stop('cheonan', 'done'); stop('gyeryong', 'now');
-  place('⛰', '계룡산', '오른쪽 · 약 6km'); car(300, 470);
-  doc('오른쪽에 보이는 큰 산이 계룡산이에요. 산줄기가 닭 볏을 쓴 용처럼 생겼대요.', false, 'gyeryong');   // 곳 id 를 붙여 여행 기록에 남김
+  place('⛰', '계룡산', '왼쪽 · 약 6km'); car(300, 470);
+  doc('왼쪽에 보이는 큰 산이 계룡산이에요. 산줄기가 닭 볏을 쓴 용처럼 생겼대요.', false, 'gyeryong');   // 곳 id 를 붙여 여행 기록에 남김
   await wait(6000);
   askQuiz('gyeryong');      // 임의 자료 sample-data/stories.js quiz
   cap('직진 구간 = 여유. 아이가 말로 답하는 퀴즈를 냅니다');
